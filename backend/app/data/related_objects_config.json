@@ -1,0 +1,47 @@
+{
+  "case_related_objects": {
+    "description": "Configuration for Case object related objects in Salesforce",
+    "objects": [
+      {
+        "name": "Account",
+        "relationship": "Case.AccountId",
+        "fields": ["Id", "Name", "Industry", "Type", "AccountNumber", "Phone", "BillingCity", "BillingCountry"],
+        "description": "Customer account information"
+      },
+      {
+        "name": "Contact",
+        "relationship": "Case.ContactId",
+        "fields": ["Id", "Name", "Email", "Phone", "Title", "Department"],
+        "description": "Contact person details"
+      },
+      {
+        "name": "CaseComment",
+        "relationship": "Case.Id",
+        "fields": ["Id", "CommentBody", "CreatedDate", "CreatedById", "IsPublished"],
+        "description": "Comments and notes on the case"
+      },
+      {
+        "name": "Attachment",
+        "relationship": "Case.Id",
+        "fields": ["Id", "Name", "ContentType", "BodyLength", "CreatedDate"],
+        "description": "Files attached to the case"
+      },
+      {
+        "name": "EmailMessage",
+        "relationship": "Case.Id",
+        "fields": ["Id", "Subject", "TextBody", "FromAddress", "ToAddress", "MessageDate", "Status"],
+        "description": "Email communications related to the case"
+      }
+    ],
+    "sensitive_fields": [
+      "Email",
+      "Phone",
+      "SSN",
+      "CreditCard",
+      "AccountNumber",
+      "Password",
+      "Token",
+      "API_Key"
+    ]
+  }
+}

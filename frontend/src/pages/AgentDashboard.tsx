@@ -1,0 +1,231 @@
+/**
+ * Agent Dashboard - Main interface for customer service agents
+ */
+import React, { useState } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { apiService } from '@/services/api';
+import { AlertCircle, CheckCircle, Clock, Users } from 'lucide-react';
+import type { CaseAnalysisResponse, AgentInfo } from '@/types';
+
+export const AgentDashboard: React.FC = () => {
+  const [caseId, setCaseId] = useState('');
+  const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
+
+  // Fetch available agents
+  const { data: agents } = useQuery({
+    queryKey: ['agents'],
+    queryFn: () => apiService.getAvailableAgents(),
+  });
+
+  // Analyze case mutation
+  const analyzeMutation = useMutation({
+    mutationFn: (caseId: string) =>
+      apiService.analyzeCase({ case_id: caseId, include_related_objects: true }),
+  });
+
+  // Notify agents mutation
+  const notifyMutation = useMutation({
+    mutationFn: ({ caseId, agentIds, summary }: { caseId: string; agentIds: string[]; summary: string }) =>
+      apiService.notifyAgents(caseId, agentIds, summary),
+  });
+
+  const handleAnalyze = () => {
+    if (caseId.trim()) {
+      analyzeMutation.mutate(caseId);
+    }
+  };
+
+  const handleNotifyAgents = () => {
+    if (analyzeMutation.data && selectedAgents.length > 0) {
+      notifyMutation.mutate({
+        caseId: analyzeMutation.data.case_id,
+        agentIds: selectedAgents,
+        summary: analyzeMutation.data.sanitized_summary,
+      });
+    }
+  };
+
+  const analysis: CaseAnalysisResponse | undefined = analyzeMutation.data;
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Customer 360 Copilot</h1>
+          <p className="text-gray-600 mt-2">AI-powered case analysis and management</p>
+        </header>
+
+        {/* Case Input Section */}
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4">Analyze Case</h2>
+          <div className="flex gap-4">
+            <input
+              type="text"
+              value={caseId}
+              onChange={(e) => setCaseId(e.target.value)}
+              placeholder="Enter Case ID (e.g., 00001)"
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+            <button
+              onClick={handleAnalyze}
+              disabled={analyzeMutation.isPending}
+              className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              {analyzeMutation.isPending ? 'Analyzing...' : 'Analyze'}
+            </button>
+          </div>
+        </div>
+
+        {/* Analysis Results */}
+        {analysis && (
+          <div className="space-y-6">
+            {/* Metrics Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <MetricCard
+                icon={<CheckCircle className="w-6 h-6 text-green-600" />}
+                label="Accuracy"
+                value={`${analysis.accuracy_percentage.toFixed(1)}%`}
+                color="green"
+              />
+              <MetricCard
+                icon={<AlertCircle className="w-6 h-6 text-yellow-600" />}
+                label="Priority"
+                value={analysis.priority_level}
+                color="yellow"
+              />
+              <MetricCard
+                icon={<Clock className="w-6 h-6 text-blue-600" />}
+                label="Est. Resolution"
+                value={analysis.estimated_resolution_time || 'N/A'}
+                color="blue"
+              />
+            </div>
+
+            {/* Summary Section */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold mb-4">Case Summary</h3>
+              <div className="prose max-w-none">
+                <p className="text-gray-700">{analysis.sanitized_summary}</p>
+              </div>
+            </div>
+
+            {/* Next Actions */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold mb-4">Recommended Next Actions</h3>
+              <ol className="list-decimal list-inside space-y-2">
+                {analysis.next_actions.map((action, idx) => (
+                  <li key={idx} className="text-gray-700">
+                    {action}
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            {/* Required Teams */}
+            {analysis.required_teams.length > 0 && (
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Users className="w-5 h-5" />
+                  Required Teams
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {analysis.required_teams.map((team, idx) => (
+                    <span
+                      key={idx}
+                      className="px-3 py-1 bg-primary-100 text-primary-800 rounded-full text-sm"
+                    >
+                      {team}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Agent Notification */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold mb-4">Notify Agents</h3>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {agents?.map((agent) => (
+                    <label
+                      key={agent.agent_id}
+                      className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedAgents.includes(agent.agent_id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedAgents([...selectedAgents, agent.agent_id]);
+                          } else {
+                            setSelectedAgents(selectedAgents.filter((id) => id !== agent.agent_id));
+                          }
+                        }}
+                        className="w-4 h-4 text-primary-600"
+                      />
+                      <div className="flex-1">
+                        <div className="font-medium">{agent.agent_name}</div>
+                        <div className="text-sm text-gray-500">
+                          {agent.skills.slice(0, 2).join(', ')}
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-500">Load: {agent.current_workload}</div>
+                    </label>
+                  ))}
+                </div>
+                <button
+                  onClick={handleNotifyAgents}
+                  disabled={selectedAgents.length === 0 || notifyMutation.isPending}
+                  className="w-full px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {notifyMutation.isPending
+                    ? 'Sending...'
+                    : `Notify ${selectedAgents.length} Agent(s)`}
+                </button>
+                {notifyMutation.isSuccess && (
+                  <div className="p-3 bg-green-50 text-green-800 rounded-lg">
+                    ✓ Notification sent successfully!
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Error Display */}
+        {analyzeMutation.isError && (
+          <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg p-4">
+            <strong>Error:</strong> {(analyzeMutation.error as Error).message}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+interface MetricCardProps {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  color: 'green' | 'yellow' | 'blue';
+}
+
+const MetricCard: React.FC<MetricCardProps> = ({ icon, label, value, color }) => {
+  const colorClasses = {
+    green: 'bg-green-50 border-green-200',
+    yellow: 'bg-yellow-50 border-yellow-200',
+    blue: 'bg-blue-50 border-blue-200',
+  };
+
+  return (
+    <div className={`${colorClasses[color]} border rounded-lg p-4`}>
+      <div className="flex items-center gap-3">
+        {icon}
+        <div>
+          <div className="text-sm text-gray-600">{label}</div>
+          <div className="text-xl font-semibold">{value}</div>
+        </div>
+      </div>
+    </div>
+  );
+};
