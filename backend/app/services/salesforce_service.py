@@ -17,18 +17,152 @@ class SalesforceService:
         self._connect()
     
     def _connect(self):
-        """Establish connection to Salesforce"""
+        """Establish connection to Salesforce using OAuth 2.0 or Username/Password"""
         try:
-            self.sf = Salesforce(
-                username=settings.SALESFORCE_USERNAME,
-                password=settings.SALESFORCE_PASSWORD,
-                security_token=settings.SALESFORCE_SECURITY_TOKEN,
-                domain=settings.SALESFORCE_DOMAIN
-            )
+            # Determine which authentication method to use
+            has_oauth = settings.SALESFORCE_CLIENT_ID and settings.SALESFORCE_CLIENT_SECRET
+            has_username_pwd = settings.SALESFORCE_USERNAME and settings.SALESFORCE_PASSWORD
+            
+            if has_oauth:
+                print("🔐 Attempting Salesforce connection using OAuth 2.0...")
+                self._connect_oauth()
+            elif has_username_pwd:
+                print("🔐 Attempting Salesforce connection using Username/Password...")
+                self._connect_username_password()
+            else:
+                print("❌ No Salesforce credentials configured. Please set either:")
+                print("   - OAuth: SALESFORCE_CLIENT_ID and SALESFORCE_CLIENT_SECRET")
+                print("   - Username/Password: SALESFORCE_USERNAME, SALESFORCE_PASSWORD, and SALESFORCE_SECURITY_TOKEN")
+                self.sf = None
         except Exception as e:
-            print(f"Failed to connect to Salesforce: {e}")
+            print(f"❌ Failed to connect to Salesforce: {e}")
+            print(f"   Error type: {type(e).__name__}")
             # For PoC, we'll continue without connection
             self.sf = None
+    
+    def _connect_oauth(self):
+        """Connect to Salesforce using OAuth 2.0 Client Credentials Flow"""
+        import requests
+        
+        # Construct the token endpoint URL
+        if settings.SALESFORCE_DOMAIN in ['login', 'test']:
+            base_url = f"https://{settings.SALESFORCE_DOMAIN}.salesforce.com"
+        else:
+            # Custom domain (e.g., mycompany.my.salesforce.com)
+            base_url = f"https://{settings.SALESFORCE_DOMAIN}.salesforce.com"
+        
+        token_url = f"{base_url}/services/oauth2/token"
+        
+        # If we have username/password along with client credentials, use password grant
+        if settings.SALESFORCE_USERNAME and settings.SALESFORCE_PASSWORD:
+            # OAuth 2.0 Password Grant (more common for service accounts)
+            payload = {
+                'grant_type': 'password',
+                'client_id': settings.SALESFORCE_CLIENT_ID,
+                'client_secret': settings.SALESFORCE_CLIENT_SECRET,
+                'username': settings.SALESFORCE_USERNAME,
+                'password': settings.SALESFORCE_PASSWORD + settings.SALESFORCE_SECURITY_TOKEN
+            }
+            print(f"   Using OAuth 2.0 Password Grant to {token_url}")
+        else:
+            # OAuth 2.0 Client Credentials Grant (requires JWT Bearer flow setup in SF)
+            # Note: This requires additional setup in Salesforce with a Connected App
+            payload = {
+                'grant_type': 'client_credentials',
+                'client_id': settings.SALESFORCE_CLIENT_ID,
+                'client_secret': settings.SALESFORCE_CLIENT_SECRET
+            }
+            print(f"   Using OAuth 2.0 Client Credentials Grant to {token_url}")
+        
+        try:
+            response = requests.post(token_url, data=payload, timeout=10)
+            response.raise_for_status()
+            
+            oauth_response = response.json()
+            
+            # Extract access token and instance URL
+            access_token = oauth_response['access_token']
+            instance_url = oauth_response['instance_url']
+            
+            print(f"✅ OAuth token obtained successfully")
+            print(f"   Instance URL: {instance_url}")
+            
+            # Create Salesforce connection with the access token
+            self.sf = Salesforce(
+                instance_url=instance_url,
+                session_id=access_token
+            )
+            
+        except requests.exceptions.HTTPError as e:
+            error_details = ""
+            try:
+                error_details = e.response.json()
+                print(f"❌ OAuth authentication failed: {error_details}")
+            except:
+                print(f"❌ OAuth authentication failed: {e}")
+            raise Exception(f"OAuth authentication failed: {error_details or str(e)}")
+        except Exception as e:
+            print(f"❌ OAuth connection error: {e}")
+            raise
+    
+    def _connect_username_password(self):
+        """Connect to Salesforce using Username/Password/Security Token"""
+        # For custom domains, simple-salesforce expects just the domain name
+        # For example: 'royalcanin-us--rcdev.sandbox.my' (not full URL)
+        # The library constructs https://[domain].salesforce.com internally
+        # Standard domains: 'login' or 'test'
+        
+        print(f"   Domain: {settings.SALESFORCE_DOMAIN}")
+        print(f"   Username: {settings.SALESFORCE_USERNAME}")
+        
+        self.sf = Salesforce(
+            username=settings.SALESFORCE_USERNAME,
+            password=settings.SALESFORCE_PASSWORD,
+            security_token=settings.SALESFORCE_SECURITY_TOKEN,
+            domain=settings.SALESFORCE_DOMAIN
+        )
+        
+        print(f"✅ Connected successfully")
+        print(f"   Instance: {self.sf.sf_instance}")
+    
+    def check_connection(self) -> Dict[str, Any]:
+        """
+        Check Salesforce connection health
+        
+        Returns:
+            Dictionary with connection status and details
+        """
+        if not self.sf:
+            return {
+                "connected": False,
+                "status": "disconnected",
+                "message": "Salesforce connection not established. Please verify credentials.",
+                "error": "Connection object is None"
+            }
+        
+        try:
+            # Test connection with a simple query
+            result = self.sf.query("SELECT Id FROM User LIMIT 1")
+            
+            return {
+                "connected": True,
+                "status": "connected",
+                "message": "Salesforce connection is healthy",
+                "details": {
+                    "instance_url": self.sf.sf_instance,
+                    "api_version": self.sf.sf_version,
+                    "session_active": self.sf.session_id is not None,
+                    "query_test": "passed"
+                }
+            }
+        except Exception as e:
+            return {
+                "connected": False,
+                "status": "error",
+                "message": f"Connection exists but API call failed: {str(e)}",
+                "error": str(e),
+                "error_type": type(e).__name__
+            }
     
     def get_case_by_id(self, case_id: str) -> Optional[CaseData]:
         """

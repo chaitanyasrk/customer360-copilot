@@ -29,6 +29,25 @@ async def health_check():
     )
 
 
+@router.get("/salesforce/health")
+async def salesforce_health_check():
+    """
+    Salesforce connection health check endpoint
+    
+    Tests the Salesforce API connection and returns detailed status information.
+    This endpoint does not require authentication and can be used to verify SF credentials.
+    """
+    from app.services.salesforce_service import salesforce_service
+    
+    # Use the dedicated health check method from the service
+    health_status = salesforce_service.check_connection()
+    
+    # Add timestamp to the response
+    health_status["timestamp"] = datetime.utcnow()
+    
+    return health_status
+
+
 @router.post("/auth/token")
 async def login(username: str, password: str, role: str = "agent"):
     """

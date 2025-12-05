@@ -8,11 +8,17 @@ from typing import List
 class Settings(BaseSettings):
     """Application settings loaded from environment variables"""
     
-    # Salesforce Configuration
-    SALESFORCE_USERNAME: str
-    SALESFORCE_PASSWORD: str
-    SALESFORCE_SECURITY_TOKEN: str
-    SALESFORCE_DOMAIN: str = "login"
+    # Salesforce Configuration - Method 1: Username/Password/Token
+    SALESFORCE_USERNAME: str = ""
+    SALESFORCE_PASSWORD: str = ""
+    SALESFORCE_SECURITY_TOKEN: str = ""
+    
+    # Salesforce Configuration - Method 2: OAuth 2.0 (Recommended)
+    SALESFORCE_CLIENT_ID: str = ""
+    SALESFORCE_CLIENT_SECRET: str = ""
+    
+    # Common Salesforce Settings
+    SALESFORCE_DOMAIN: str = "login"  # 'login' for production, 'test' for sandbox
     
     # Google Gemini API
     GOOGLE_API_KEY: str
