@@ -67,9 +67,26 @@ class ApiService {
     return response.data;
   }
 
+  // Save case summary to Salesforce custom object
+  async saveCaseSummary(caseId: string, summary: string, additionalData?: Record<string, any>) {
+    const response = await this.client.post(`/cases/${caseId}/save-summary`, {
+      summary,
+      additional_data: additionalData,
+    });
+    return response.data;
+  }
+
   // Health check
   async healthCheck() {
     const response = await this.client.get('/health');
+    return response.data;
+  }
+
+  // Ask a question about a case
+  async queryCaseDetails(caseId: string, question: string) {
+    const response = await this.client.post(`/cases/${caseId}/query`, {
+      question,
+    });
     return response.data;
   }
 }

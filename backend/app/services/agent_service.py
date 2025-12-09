@@ -291,7 +291,109 @@ class CaseAnalysisAgent:
             sanitized_summary=final_state["sanitized_summary"],
             accuracy_percentage=final_state["accuracy_percentage"]
         )
+    
+    async def answer_case_question(self, case_id: str, question: str) -> Dict[str, Any]:
+        """
+        Answer a question about a case using case data and related objects
+        
+        Args:
+            case_id: Salesforce Case ID
+            question: User's question about the case
+        
+        Returns:
+            Dictionary with answer, sources, and confidence
+        """
+        # Fetch case data
+        case_data = salesforce_service.get_case_by_id(case_id)
+        related_data = salesforce_service.get_related_objects(case_id)
+        
+        if not case_data:
+            return {
+                "answer": f"Unable to find case with ID: {case_id}",
+                "sources": [],
+                "confidence": 0.0,
+                "case_id": case_id
+            }
+        
+        # Format context from case and related data
+        context = self._build_qa_context(case_data, related_data)
+        
+        # Create Q&A prompt
+        qa_prompt = f"""You are a helpful customer service AI assistant. Based on the following case information, answer the user's question accurately and concisely.
+
+CASE INFORMATION:
+{context}
+
+USER QUESTION: {question}
+
+Instructions:
+1. Answer the question based ONLY on the provided case information
+2. If the information is not available, say so clearly
+3. Be concise but comprehensive
+4. Identify which data sources you used to answer
+
+Respond in JSON format:
+{{
+    "answer": "Your answer here",
+    "sources": ["List of data sources used, e.g., 'Case Details', 'Account Information', 'Case Comments'"],
+    "confidence": 0.0-1.0 (how confident you are in the answer based on available data)
+}}
+"""
+        
+        try:
+            # Get response from LLM
+            response = self.llm.invoke(qa_prompt)
+            response_text = response.content if hasattr(response, 'content') else str(response)
+            
+            # Parse JSON response
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group())
+                result["case_id"] = case_id
+                return result
+            else:
+                return {
+                    "answer": response_text,
+                    "sources": ["Case Data"],
+                    "confidence": 0.7,
+                    "case_id": case_id
+                }
+        except Exception as e:
+            print(f"Error in Q&A: {e}")
+            return {
+                "answer": f"I encountered an error while processing your question: {str(e)}",
+                "sources": [],
+                "confidence": 0.0,
+                "case_id": case_id
+            }
+    
+    def _build_qa_context(self, case_data: CaseData, related_data: List) -> str:
+        """Build context string for Q&A from case and related data"""
+        context_parts = []
+        
+        # Add case details
+        context_parts.append("=== CASE DETAILS ===")
+        context_parts.append(f"Case ID: {case_data.case_id}")
+        context_parts.append(f"Subject: {case_data.subject}")
+        context_parts.append(f"Description: {case_data.description}")
+        context_parts.append(f"Priority: {case_data.priority}")
+        context_parts.append(f"Status: {case_data.status}")
+        context_parts.append(f"Created Date: {case_data.created_date}")
+        
+        # Add related objects data
+        for related_obj in related_data:
+            obj_name = related_obj.object_name if hasattr(related_obj, 'object_name') else related_obj.get('object_name', 'Unknown')
+            records = related_obj.records if hasattr(related_obj, 'records') else related_obj.get('records', [])
+            
+            context_parts.append(f"\n=== {obj_name.upper()} ===")
+            for record in records:
+                for key, value in record.items():
+                    if key != 'Id' and value:
+                        context_parts.append(f"{key}: {value}")
+        
+        return "\n".join(context_parts)
 
 
 # Singleton instance
 agent_service = CaseAnalysisAgent()
+

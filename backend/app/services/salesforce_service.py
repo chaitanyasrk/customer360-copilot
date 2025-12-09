@@ -56,14 +56,23 @@ class SalesforceService:
         # If we have username/password along with client credentials, use password grant
         if settings.SALESFORCE_USERNAME and settings.SALESFORCE_PASSWORD:
             # OAuth 2.0 Password Grant (more common for service accounts)
+            combined_password = settings.SALESFORCE_PASSWORD + settings.SALESFORCE_SECURITY_TOKEN
             payload = {
                 'grant_type': 'password',
                 'client_id': settings.SALESFORCE_CLIENT_ID,
                 'client_secret': settings.SALESFORCE_CLIENT_SECRET,
                 'username': settings.SALESFORCE_USERNAME,
-                'password': settings.SALESFORCE_PASSWORD + settings.SALESFORCE_SECURITY_TOKEN
+                'password': combined_password
             }
             print(f"   Using OAuth 2.0 Password Grant to {token_url}")
+            # Debug: Show credential info (masked) to help troubleshoot
+            print(f"   📋 Credentials being used:")
+            print(f"      Username: {settings.SALESFORCE_USERNAME}")
+            print(f"      Client ID: {settings.SALESFORCE_CLIENT_ID[:10]}...{settings.SALESFORCE_CLIENT_ID[-5:]}")
+            print(f"      Client Secret length: {len(settings.SALESFORCE_CLIENT_SECRET)} chars")
+            print(f"      Password length: {len(settings.SALESFORCE_PASSWORD)} chars")
+            print(f"      Security Token length: {len(settings.SALESFORCE_SECURITY_TOKEN)} chars")
+            print(f"      Combined password+token length: {len(combined_password)} chars")
         else:
             # OAuth 2.0 Client Credentials Grant (requires JWT Bearer flow setup in SF)
             # Note: This requires additional setup in Salesforce with a Connected App
@@ -318,6 +327,83 @@ class SalesforceService:
                 }]
             )
         ]
+    
+    def save_case_summary(self, case_id: str, summary: str, additional_data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Save case summary to a Salesforce custom object
+        
+        Args:
+            case_id: Salesforce Case ID
+            summary: The AI-generated summary text
+            additional_data: Optional additional fields to save
+        
+        Returns:
+            Dictionary with status and record ID
+        """
+        if not self.sf:
+            # Mock response for when not connected
+            print("⚠️ Salesforce not connected - returning mock save response")
+            return {
+                "success": True,
+                "record_id": f"a00MOCK{case_id[-5:]}",
+                "message": "Summary saved (mock mode)",
+                "case_id": case_id
+            }
+        
+        try:
+            # Get custom object configuration
+            object_name = settings.SUMMARY_OBJECT_API_NAME
+            summary_field = settings.SUMMARY_FIELD_NAME
+            case_field = settings.CASE_ID_FIELD_NAME
+            
+            # Build the record data
+            record_data = {
+                case_field: case_id,
+                summary_field: summary
+            }
+            
+            # Add any additional data
+            if additional_data:
+                record_data.update(additional_data)
+            
+            # Check if a summary already exists for this case
+            existing = self.sf.query(
+                f"SELECT Id FROM {object_name} WHERE {case_field} = '{case_id}' LIMIT 1"
+            )
+            
+            if existing['totalSize'] > 0:
+                # Update existing record
+                existing_id = existing['records'][0]['Id']
+                getattr(self.sf, object_name).update(existing_id, record_data)
+                print(f"✅ Updated existing summary record: {existing_id}")
+                return {
+                    "success": True,
+                    "record_id": existing_id,
+                    "message": "Summary updated successfully",
+                    "case_id": case_id,
+                    "action": "update"
+                }
+            else:
+                # Create new record
+                result = getattr(self.sf, object_name).create(record_data)
+                record_id = result['id']
+                print(f"✅ Created new summary record: {record_id}")
+                return {
+                    "success": True,
+                    "record_id": record_id,
+                    "message": "Summary saved successfully",
+                    "case_id": case_id,
+                    "action": "create"
+                }
+                
+        except Exception as e:
+            print(f"❌ Error saving summary: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": f"Failed to save summary: {str(e)}",
+                "case_id": case_id
+            }
 
 
 # Singleton instance

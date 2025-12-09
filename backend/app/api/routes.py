@@ -176,3 +176,73 @@ async def get_case_details(
         "case": case_data,
         "related_objects": related_data
     }
+
+
+@router.post("/cases/{case_id}/save-summary")
+async def save_case_summary(
+    case_id: str,
+    request: dict,
+    token: TokenPayload = Depends(verify_agent_token)
+):
+    """
+    Save the AI-generated summary to a Salesforce custom object
+    
+    This endpoint saves the summary to the configured custom object in Salesforce,
+    creating a new record or updating an existing one for the case.
+    """
+    from app.services.salesforce_service import salesforce_service
+    
+    summary = request.get("summary", "")
+    additional_data = request.get("additional_data", None)
+    
+    if not summary:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Summary text is required"
+        )
+    
+    result = salesforce_service.save_case_summary(
+        case_id=case_id,
+        summary=summary,
+        additional_data=additional_data
+    )
+    
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=result.get("message", "Failed to save summary")
+        )
+    
+    return result
+
+
+@router.post("/cases/{case_id}/query")
+async def query_case(
+    case_id: str,
+    request: dict,
+    token: TokenPayload = Depends(verify_agent_token)
+):
+    """
+    Answer questions about a case using AI
+    
+    This endpoint allows agents to ask questions about a case and receive
+    AI-generated answers based on the case data and related objects.
+    """
+    from app.services.agent_service import agent_service
+    
+    question = request.get("question", "")
+    
+    if not question:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Question is required"
+        )
+    
+    try:
+        result = await agent_service.answer_case_question(case_id, question)
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing question: {str(e)}"
+        )

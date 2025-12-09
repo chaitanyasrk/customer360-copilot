@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     # Vector DB Configuration
     CHROMA_PERSIST_DIRECTORY: str = "./chroma_db"
     
+    # Custom Object Configuration for Summary Storage
+    SUMMARY_OBJECT_API_NAME: str = "Case_Summary__c"  # API name of custom object
+    SUMMARY_FIELD_NAME: str = "Summary__c"  # Field for storing the summary
+    CASE_ID_FIELD_NAME: str = "Case__c"  # Lookup field to Case
+    
     @property
     def cors_origins_list(self) -> List[str]:
         """Parse CORS origins into a list"""

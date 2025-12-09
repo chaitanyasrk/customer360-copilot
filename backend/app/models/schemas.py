@@ -119,3 +119,34 @@ class HealthResponse(BaseModel):
     status: str
     timestamp: datetime
     version: str = "1.0.0"
+
+
+class SaveSummaryRequest(BaseModel):
+    """Request model for saving case summary"""
+    summary: str
+    additional_data: Optional[Dict[str, Any]] = None
+
+
+class SaveSummaryResponse(BaseModel):
+    """Response model for save summary operation"""
+    success: bool
+    record_id: Optional[str] = None
+    message: str
+    case_id: str
+    action: Optional[str] = None
+    error: Optional[str] = None
+
+
+class CaseQueryRequest(BaseModel):
+    """Request model for querying case details"""
+    question: str
+
+
+class CaseQueryResponse(BaseModel):
+    """Response model for case query"""
+    answer: str
+    sources: List[str] = []
+    confidence: float = 0.0
+    case_id: str
+
+

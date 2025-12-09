@@ -72,3 +72,15 @@ export interface User {
   role: 'user' | 'agent';
   email?: string;
 }
+
+export interface CaseQueryRequest {
+  question: string;
+}
+
+export interface CaseQueryResponse {
+  answer: string;
+  sources: string[];
+  confidence: number;
+  case_id: string;
+}
+

@@ -5,7 +5,10 @@ import React, { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiService } from '@/services/api';
 import { AlertCircle, CheckCircle, Clock, Users } from 'lucide-react';
-import type { CaseAnalysisResponse, AgentInfo } from '@/types';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { CaseChat } from '@/components/CaseChat';
+import type { CaseAnalysisResponse } from '@/types';
+
 
 export const AgentDashboard: React.FC = () => {
   const [caseId, setCaseId] = useState('');
@@ -29,6 +32,12 @@ export const AgentDashboard: React.FC = () => {
       apiService.notifyAgents(caseId, agentIds, summary),
   });
 
+  // Save summary mutation
+  const saveSummaryMutation = useMutation({
+    mutationFn: ({ caseId, summary }: { caseId: string; summary: string }) =>
+      apiService.saveCaseSummary(caseId, summary),
+  });
+
   const handleAnalyze = () => {
     if (caseId.trim()) {
       analyzeMutation.mutate(caseId);
@@ -45,10 +54,38 @@ export const AgentDashboard: React.FC = () => {
     }
   };
 
+  const handleSaveSummary = () => {
+    if (analyzeMutation.data) {
+      saveSummaryMutation.mutate({
+        caseId: analyzeMutation.data.case_id,
+        summary: analyzeMutation.data.sanitized_summary,
+      });
+    }
+  };
+
   const analysis: CaseAnalysisResponse | undefined = analyzeMutation.data;
+
+  // Determine loading message
+  const getLoadingMessage = () => {
+    if (analyzeMutation.isPending) return 'Analyzing case with AI...';
+    if (saveSummaryMutation.isPending) return 'Saving summary to Salesforce...';
+    if (notifyMutation.isPending) return 'Sending notifications...';
+    return 'Loading...';
+  };
+
+  const isLoading = analyzeMutation.isPending || saveSummaryMutation.isPending || notifyMutation.isPending;
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Loading Overlay */}
+      {isLoading && (
+        <LoadingSpinner
+          fullscreen
+          size="lg"
+          message={getLoadingMessage()}
+        />
+      )}
+
       <div className="max-w-7xl mx-auto px-4 py-8">
         <header className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Customer 360 Copilot</h1>
@@ -106,6 +143,30 @@ export const AgentDashboard: React.FC = () => {
               <h3 className="text-lg font-semibold mb-4">Case Summary</h3>
               <div className="prose max-w-none">
                 <p className="text-gray-700">{analysis.sanitized_summary}</p>
+              </div>
+              <div className="mt-4 flex items-center gap-4">
+                <button
+                  onClick={handleSaveSummary}
+                  disabled={saveSummaryMutation.isPending}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                  </svg>
+                  Save to Salesforce
+                </button>
+                {saveSummaryMutation.isSuccess && (
+                  <span className="text-green-600 flex items-center gap-1">
+                    <CheckCircle className="w-4 h-4" />
+                    Summary saved successfully!
+                  </span>
+                )}
+                {saveSummaryMutation.isError && (
+                  <span className="text-red-600 flex items-center gap-1">
+                    <AlertCircle className="w-4 h-4" />
+                    Failed to save summary
+                  </span>
+                )}
               </div>
             </div>
 
@@ -189,6 +250,9 @@ export const AgentDashboard: React.FC = () => {
                 )}
               </div>
             </div>
+
+            {/* Case Q&A Chat */}
+            <CaseChat caseId={analysis.case_id} />
           </div>
         )}
 
