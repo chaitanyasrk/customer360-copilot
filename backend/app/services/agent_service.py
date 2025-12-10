@@ -43,7 +43,8 @@ class CaseAnalysisAgent:
     def __init__(self):
         """Initialize the agent with LLM and graph"""
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            #model="gemini-2.5-flash",
+            model="gemini-2.5-flash-lite",
             google_api_key=settings.GOOGLE_API_KEY,
             temperature=0.3
         )
@@ -250,22 +251,48 @@ class CaseAnalysisAgent:
             "confidence_score": 0.75
         }
     
-    async def analyze_case(self, case_id: str) -> CaseAnalysisResponse:
+    async def analyze_case(self, case_id: str, case_data: Dict[str, Any] = None) -> CaseAnalysisResponse:
         """
         Main entry point for case analysis
         
         Args:
-            case_id: Salesforce Case ID
+            case_id: Salesforce Case Number
+            case_data: Optional pre-fetched case data from get_case_by_number()
         
         Returns:
             CaseAnalysisResponse with analysis results
         """
-        # Initialize state
+        # Build related data from pre-fetched case_data
+        related_data = []
+        if case_data:
+            # Add account as related data if available
+            if case_data.get('account'):
+                related_data.append({
+                    'object_name': 'Account',
+                    'records': [case_data['account']]
+                })
+            
+            # Add contact as related data if available
+            if case_data.get('contact'):
+                related_data.append({
+                    'object_name': 'Contact',
+                    'records': [case_data['contact']]
+                })
+        
+        # Prepare case data for state
+        state_case_data = {}
+        if case_data and case_data.get('case'):
+            state_case_data = case_data['case']
+        
+        # Format examples
+        examples_text = self._format_examples()
+        
+        # Initialize state with pre-fetched data
         initial_state: AgentState = {
             "case_id": case_id,
-            "case_data": {},
-            "related_data": [],
-            "examples": "",
+            "case_data": state_case_data,
+            "related_data": related_data,
+            "examples": examples_text,
             "analysis_result": {},
             "raw_summary": "",
             "sanitized_summary": "",
@@ -273,8 +300,16 @@ class CaseAnalysisAgent:
             "accuracy_percentage": 0.0
         }
         
-        # Run the graph
-        final_state = self.graph.invoke(initial_state)
+        # Skip fetch_data node if we already have data, go directly to analyze
+        if case_data:
+            # Run analysis directly
+            state = self._analyze_case(initial_state)
+            state = self._sanitize_summary(state)
+            state = self._calculate_accuracy(state)
+            final_state = state
+        else:
+            # Run the full graph (will fetch data)
+            final_state = self.graph.invoke(initial_state)
         
         # Build response
         analysis_result = final_state["analysis_result"]

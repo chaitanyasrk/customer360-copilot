@@ -84,3 +84,10 @@ export interface CaseQueryResponse {
   case_id: string;
 }
 
+export interface CaseClosedResponse {
+  is_closed: boolean;
+  case_number: string;
+  status: string;
+  message: string;
+  closed_date?: string;
+}

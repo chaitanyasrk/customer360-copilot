@@ -9,13 +9,17 @@ from datetime import datetime
 class CaseData(BaseModel):
     """Salesforce Case data model"""
     case_id: str = Field(..., description="Salesforce Case ID")
+    case_number: str = Field(default="", description="User-visible Case Number")
     subject: str = Field(..., description="Case subject")
     description: str = Field(..., description="Case description")
     priority: str = Field(..., description="Case priority level")
     status: str = Field(..., description="Case status")
+    is_closed: bool = Field(default=False, description="Whether the case is closed")
     created_date: str = Field(..., description="Case creation date")
     account_id: Optional[str] = None
     contact_id: Optional[str] = None
+    account_data: Optional[Dict[str, Any]] = None
+    contact_data: Optional[Dict[str, Any]] = None
 
 
 class RelatedObjectData(BaseModel):
@@ -150,3 +154,9 @@ class CaseQueryResponse(BaseModel):
     case_id: str
 
 
+class CaseClosedResponse(BaseModel):
+    """Response model when attempting to analyze a closed case"""
+    is_closed: bool = True
+    case_number: str
+    status: str
+    message: str = "This case is closed. Analysis is not available for closed cases."

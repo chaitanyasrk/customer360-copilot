@@ -191,10 +191,12 @@ class SalesforceService:
             case = self.sf.Case.get(case_id)
             return CaseData(
                 case_id=case['Id'],
+                case_number=case.get('CaseNumber', ''),
                 subject=case.get('Subject', ''),
                 description=case.get('Description', ''),
                 priority=case.get('Priority', 'Medium'),
                 status=case.get('Status', 'New'),
+                is_closed=case.get('IsClosed', False),
                 created_date=case.get('CreatedDate', ''),
                 account_id=case.get('AccountId'),
                 contact_id=case.get('ContactId')
@@ -202,6 +204,193 @@ class SalesforceService:
         except Exception as e:
             print(f"Error fetching case {case_id}: {e}")
             return None
+    
+    def get_case_by_number(self, case_number: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve case details with account and contact using CaseNumber
+        Uses a single SOQL query to fetch all essential data.
+        
+        Args:
+            case_number: Salesforce Case Number (user-visible, e.g., '00001234')
+        
+        Returns:
+            Dictionary with case, account, and contact data or None if not found
+        """
+        if not self.sf:
+            print("❌ Salesforce not connected - cannot fetch case by number")
+            return None
+        
+        try:
+            # SOQL query with essential fields for the copilot
+            soql_query = f"""
+                SELECT 
+                    Id, CaseNumber, Subject, Description, Priority, Status, IsClosed,
+                    ClosedDate, CreatedDate, Origin, Type, Reason,
+                    AccountId, ContactId, OwnerId,
+                    Owner.Id, Owner.Name, Owner.Email,
+                    Customer_Type__c, Customer_Sentiment__c, Issue_Type__c, Specific_Issue__c,
+                    Resolution__c, Resolution_Comments__c,
+                    
+                    Account_Reference__r.Id, Account_Reference__r.Name,
+                    Account_Reference__r.gii__Account__c,
+                    Account_Reference__r.gii__BalanceAmount__c,
+                    Account_Reference__r.gii__CreditLimit__c,
+                    Account_Reference__r.gii__PaymentTerms__c,
+                    Account_Reference__r.Ship_To_Customer_No__c,
+                    
+                    Contact.Id, Contact.Name, Contact.FirstName, Contact.LastName,
+                    Contact.Email, Contact.Phone, Contact.MobilePhone,
+                    Contact.Title, Contact.Department,
+                    Contact.MailingCity, Contact.MailingState, Contact.MailingCountry,
+                    Contact.Customer_Type__c, Contact.Account_Ship_To_Customer_No__c
+                    
+                FROM Case 
+                WHERE CaseNumber = '{case_number}'
+                LIMIT 1
+            """
+            
+            result = self.sf.query(soql_query)
+            
+            if result['totalSize'] == 0:
+                print(f"❌ Case with number {case_number} not found")
+                return None
+            
+            case_record = result['records'][0]
+            
+            # Check if case is closed
+            is_closed = case_record.get('Status', 'Closed')
+            
+            # Extract case data
+            case_data = {
+                'case_id': case_record.get('Id'),
+                'case_number': case_record.get('CaseNumber'),
+                'subject': case_record.get('Subject', ''),
+                'description': case_record.get('Description', ''),
+                'priority': case_record.get('Priority', 'Medium'),
+                'status': case_record.get('Status', 'New'),
+                'is_closed': is_closed,
+                'closed_date': case_record.get('ClosedDate'),
+                'created_date': case_record.get('CreatedDate', ''),
+                'origin': case_record.get('Origin'),
+                'type': case_record.get('Type'),
+                'reason': case_record.get('Reason'),
+                'customer_type': case_record.get('Customer_Type__c'),
+                'customer_sentiment': case_record.get('Customer_Sentiment__c'),
+                'issue_type': case_record.get('Issue_Type__c'),
+                'specific_issue': case_record.get('Specific_Issue__c'),
+                'resolution': case_record.get('Resolution__c'),
+                'resolution_comments': case_record.get('Resolution_Comments__c'),
+                'account_id': case_record.get('AccountId'),
+                'contact_id': case_record.get('ContactId')
+            }
+            
+            # Extract account reference data
+            account_ref = case_record.get('Account_Reference__r')
+            account_data = None
+            if account_ref:
+                account_data = {
+                    'id': account_ref.get('Id'),
+                    'name': account_ref.get('Name'),
+                    'account': account_ref.get('gii__Account__c'),
+                    'balance_amount': account_ref.get('gii__BalanceAmount__c'),
+                    'credit_limit': account_ref.get('gii__CreditLimit__c'),
+                    'payment_terms': account_ref.get('gii__PaymentTerms__c'),
+                    'ship_to_customer_no': account_ref.get('Ship_To_Customer_No__c')
+                }
+            
+            # Extract contact data
+            contact = case_record.get('Contact')
+            contact_data = None
+            if contact:
+                contact_data = {
+                    'id': contact.get('Id'),
+                    'name': contact.get('Name'),
+                    'first_name': contact.get('FirstName'),
+                    'last_name': contact.get('LastName'),
+                    'email': contact.get('Email'),
+                    'phone': contact.get('Phone'),
+                    'mobile_phone': contact.get('MobilePhone'),
+                    'title': contact.get('Title'),
+                    'department': contact.get('Department'),
+                    'mailing_city': contact.get('MailingCity'),
+                    'mailing_state': contact.get('MailingState'),
+                    'mailing_country': contact.get('MailingCountry'),
+                    'customer_type': contact.get('Customer_Type__c'),
+                    'ship_to_customer_no': contact.get('Account_Ship_To_Customer_No__c')
+                }
+            
+            # Extract owner (agent) data
+            owner = case_record.get('Owner')
+            owner_data = None
+            if owner:
+                owner_data = {
+                    'id': owner.get('Id'),
+                    'name': owner.get('Name'),
+                    'email': owner.get('Email')
+                }
+            
+            return {
+                'case': case_data,
+                'account': account_data,
+                'contact': contact_data,
+                'owner': owner_data,
+                'has_account': account_data is not None,
+                'has_contact': contact_data is not None,
+                'has_owner': owner_data is not None
+            }
+            
+        except Exception as e:
+            print(f"❌ Error fetching case by number {case_number}: {e}")
+            return None
+    
+    def get_active_users(self, limit: int = 3, exclude_user_id: str = None) -> List[Dict[str, Any]]:
+        """
+        Get active standard users from Salesforce
+        
+        Args:
+            limit: Maximum number of users to return (default 3)
+            exclude_user_id: User ID to exclude (e.g., case owner)
+        
+        Returns:
+            List of user dictionaries with id, name, email
+        """
+        if not self.sf:
+            print("❌ Salesforce not connected - cannot fetch users")
+            return []
+        
+        try:
+            # Build exclusion clause
+            exclude_clause = ""
+            if exclude_user_id:
+                exclude_clause = f"AND Id != '{exclude_user_id}'"
+            
+            # Query active standard users
+            soql_query = f"""
+                SELECT Id, Name, Email
+                FROM User
+                WHERE IsActive = true 
+                AND UserType = 'Standard'
+                {exclude_clause}
+                ORDER BY Name
+                LIMIT {limit}
+            """
+            
+            result = self.sf.query(soql_query)
+            
+            users = []
+            for record in result.get('records', []):
+                users.append({
+                    'id': record.get('Id'),
+                    'name': record.get('Name'),
+                    'email': record.get('Email')
+                })
+            
+            print(f"✅ Found {len(users)} active users")
+            return users
+            
+        except Exception as e:
+            print(f"❌ Error fetching active users: {e}")
+            return []
     
     def get_related_objects(self, case_id: str) -> List[RelatedObjectData]:
         """

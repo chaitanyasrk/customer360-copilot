@@ -74,7 +74,7 @@ async def login(username: str, password: str, role: str = "agent"):
     }
 
 
-@router.post("/cases/analyze", response_model=CaseAnalysisResponse)
+@router.post("/cases/analyze")
 async def analyze_case(
     request: CaseAnalysisRequest,
     token: TokenPayload = Depends(verify_agent_token)
@@ -82,11 +82,39 @@ async def analyze_case(
     """
     Analyze a Salesforce case and generate summary with next actions
     
-    Requires agent authentication
+    Requires agent authentication.
+    Returns an error if the case is closed.
     """
+    from app.services.salesforce_service import salesforce_service
+    
     try:
-        result = await agent_service.analyze_case(request.case_id)
+        # First, fetch case data to check if it's closed
+        case_data = salesforce_service.get_case_by_number(request.case_id)
+        
+        if not case_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Case with number '{request.case_id}' not found. Please verify the case number."
+            )
+        
+        # Check if case is closed
+        # if case_data['case']['is_closed']:
+        #     return {
+        #         "is_closed": True,
+        #         "case_number": case_data['case']['case_number'],
+        #         "status": case_data['case']['status'],
+        #         "message": "This case is closed. Analysis is not available for closed cases.",
+        #         "closed_date": case_data['case'].get('closed_date')
+        #     }
+        
+        # Proceed with analysis for open cases
+        result = await agent_service.analyze_case(
+            case_id=request.case_id,
+            case_data=case_data
+        )
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -95,41 +123,51 @@ async def analyze_case(
 
 
 @router.get("/agents/available", response_model=List[AgentInfo])
-async def get_available_agents(token: TokenPayload = Depends(verify_token)):
+async def get_available_agents(
+    case_number: str = None,
+    token: TokenPayload = Depends(verify_token)
+):
     """
-    Get list of available agents
+    Get list of available agents from Salesforce
     
-    For PoC, returns mock data
+    If case_number is provided, includes the case owner as the first agent.
+    Also returns top 3 active standard users.
     """
-    # TODO: Fetch from Salesforce or agent management system
-    mock_agents = [
-        AgentInfo(
-            agent_id="agent_001",
-            agent_name="Sarah Johnson",
-            email="sarah.j@company.com",
-            skills=["Technical Support", "Billing", "API Integration"],
-            current_workload=3,
-            availability_status="available"
-        ),
-        AgentInfo(
-            agent_id="agent_002",
-            agent_name="Michael Chen",
-            email="michael.c@company.com",
-            skills=["Account Management", "Enterprise Support"],
-            current_workload=5,
-            availability_status="available"
-        ),
-        AgentInfo(
-            agent_id="agent_003",
-            agent_name="Emily Rodriguez",
-            email="emily.r@company.com",
-            skills=["Technical Support", "Product Training"],
-            current_workload=2,
-            availability_status="available"
-        )
-    ]
+    from app.services.salesforce_service import salesforce_service
     
-    return mock_agents
+    agents = []
+    owner_id = None
+    
+    # If case_number provided, get the case owner first
+    if case_number:
+        case_data = salesforce_service.get_case_by_number(case_number)
+        if case_data and case_data.get('owner'):
+            owner = case_data['owner']
+            owner_id = owner.get('id')
+            agents.append(AgentInfo(
+                agent_id=owner.get('id', ''),
+                agent_name=owner.get('name', 'Unknown'),
+                email=owner.get('email', ''),
+                skills=["Case Owner"],
+                current_workload=0,
+                availability_status="available"
+            ))
+    
+    # Get additional active users (excluding the owner if present)
+    active_users = salesforce_service.get_active_users(limit=3, exclude_user_id=owner_id)
+    
+    for user in active_users:
+        agents.append(AgentInfo(
+            agent_id=user.get('id', ''),
+            agent_name=user.get('name', 'Unknown'),
+            email=user.get('email', ''),
+            skills=["Support Agent"],
+            current_workload=0,
+            availability_status="available"
+        ))
+    
+    return agents
+
 
 
 @router.post("/cases/{case_id}/notify-agents")

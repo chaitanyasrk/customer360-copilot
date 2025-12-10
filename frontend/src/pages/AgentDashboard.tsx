@@ -7,20 +7,23 @@ import { apiService } from '@/services/api';
 import { AlertCircle, CheckCircle, Clock, Users } from 'lucide-react';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { CaseChat } from '@/components/CaseChat';
-import type { CaseAnalysisResponse } from '@/types';
+import type { CaseAnalysisResponse, CaseClosedResponse } from '@/types';
 
 
 export const AgentDashboard: React.FC = () => {
   const [caseId, setCaseId] = useState('');
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
+  const [analyzedCaseNumber, setAnalyzedCaseNumber] = useState<string | null>(null);
 
-  // Fetch available agents
+  // Fetch available agents (with case number when available)
   const { data: agents } = useQuery({
-    queryKey: ['agents'],
-    queryFn: () => apiService.getAvailableAgents(),
+    queryKey: ['agents', analyzedCaseNumber],
+    queryFn: () => apiService.getAvailableAgents(analyzedCaseNumber || undefined),
+    enabled: true,
   });
 
-  // Analyze case mutation
+
+  // Analyze case mutation - can return either analysis or closed case response
   const analyzeMutation = useMutation({
     mutationFn: (caseId: string) =>
       apiService.analyzeCase({ case_id: caseId, include_related_objects: true }),
@@ -40,30 +43,41 @@ export const AgentDashboard: React.FC = () => {
 
   const handleAnalyze = () => {
     if (caseId.trim()) {
+      setAnalyzedCaseNumber(caseId.trim());
       analyzeMutation.mutate(caseId);
     }
   };
 
   const handleNotifyAgents = () => {
-    if (analyzeMutation.data && selectedAgents.length > 0) {
+    if (analyzeMutation.data && !isCaseClosed && selectedAgents.length > 0) {
+      const data = analyzeMutation.data as CaseAnalysisResponse;
       notifyMutation.mutate({
-        caseId: analyzeMutation.data.case_id,
+        caseId: data.case_id,
         agentIds: selectedAgents,
-        summary: analyzeMutation.data.sanitized_summary,
+        summary: data.sanitized_summary,
       });
     }
   };
 
   const handleSaveSummary = () => {
-    if (analyzeMutation.data) {
+    if (analyzeMutation.data && !isCaseClosed) {
+      const data = analyzeMutation.data as CaseAnalysisResponse;
       saveSummaryMutation.mutate({
-        caseId: analyzeMutation.data.case_id,
-        summary: analyzeMutation.data.sanitized_summary,
+        caseId: data.case_id,
+        summary: data.sanitized_summary,
       });
     }
   };
 
-  const analysis: CaseAnalysisResponse | undefined = analyzeMutation.data;
+  // Check if response indicates a closed case
+  const isCaseClosed = analyzeMutation.data && 'is_closed' in analyzeMutation.data && (analyzeMutation.data as unknown as CaseClosedResponse).is_closed;
+  const closedCaseData = isCaseClosed ? (analyzeMutation.data as unknown as CaseClosedResponse) : null;
+
+  // Only set analysis if it has the expected properties (not a closed case response)
+  const rawData = analyzeMutation.data as CaseAnalysisResponse | undefined;
+  const analysis: CaseAnalysisResponse | undefined = (!isCaseClosed && rawData && 'accuracy_percentage' in rawData) ? rawData : undefined;
+
+
 
   // Determine loading message
   const getLoadingMessage = () => {
@@ -100,7 +114,7 @@ export const AgentDashboard: React.FC = () => {
               type="text"
               value={caseId}
               onChange={(e) => setCaseId(e.target.value)}
-              placeholder="Enter Case ID (e.g., 00001)"
+              placeholder="Enter Case Number (e.g., 00001234)"
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
             <button
@@ -112,6 +126,32 @@ export const AgentDashboard: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Closed Case Message */}
+        {isCaseClosed && closedCaseData && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-6">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <AlertCircle className="w-8 h-8 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-amber-800 mb-2">
+                  Case Closed
+                </h3>
+                <p className="text-amber-700 mb-2">
+                  {closedCaseData.message || 'This case is closed. Analysis is not available for closed cases.'}
+                </p>
+                <div className="text-sm text-amber-600 space-y-1">
+                  <p><strong>Case Number:</strong> {closedCaseData.case_number}</p>
+                  <p><strong>Status:</strong> {closedCaseData.status}</p>
+                  {closedCaseData.closed_date && (
+                    <p><strong>Closed Date:</strong> {new Date(closedCaseData.closed_date).toLocaleDateString()}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Analysis Results */}
         {analysis && (

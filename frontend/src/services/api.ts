@@ -30,6 +30,19 @@ class ApiService {
       }
       return config;
     });
+
+    // Add response interceptor to handle 401 Unauthorized
+    this.client.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response?.status === 401) {
+          // Clear token and redirect to login
+          localStorage.removeItem('auth_token');
+          window.location.href = '/login';
+        }
+        return Promise.reject(error);
+      }
+    );
   }
 
   // Authentication
@@ -52,9 +65,10 @@ class ApiService {
     return response.data;
   }
 
-  // Get available agents
-  async getAvailableAgents(): Promise<AgentInfo[]> {
-    const response = await this.client.get<AgentInfo[]>('/agents/available');
+  // Get available agents (optionally for a specific case)
+  async getAvailableAgents(caseNumber?: string): Promise<AgentInfo[]> {
+    const params = caseNumber ? { case_number: caseNumber } : {};
+    const response = await this.client.get<AgentInfo[]>('/agents/available', { params });
     return response.data;
   }
 
