@@ -2,9 +2,27 @@
 Salesforce integration service
 """
 import json
+import ssl
+import os
 from typing import List, Dict, Any, Optional
-from simple_salesforce import Salesforce
 from app.core.config import settings
+
+# Disable SSL verification if configured (for corporate proxy environments)
+if not settings.SALESFORCE_VERIFY_SSL:
+    # Method 1: Set environment variables for requests/urllib3
+    os.environ['CURL_CA_BUNDLE'] = ''
+    os.environ['REQUESTS_CA_BUNDLE'] = ''
+    
+    # Method 2: Disable SSL warnings
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    
+    # Method 3: Monkey-patch ssl to use unverified context
+    ssl._create_default_https_context = ssl._create_unverified_context
+    
+    print("⚠️ SSL verification globally disabled for Salesforce connections")
+
+from simple_salesforce import Salesforce
 from app.models.schemas import CaseData, RelatedObjectData
 
 
