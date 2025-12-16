@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     
     # Common Salesforce Settings
     SALESFORCE_DOMAIN: str = "login"  # 'login' for production, 'test' for sandbox
+    SALESFORCE_VERIFY_SSL: bool = True  # Set to False to disable SSL verification (for corporate proxies)
     
     # Google Gemini API
     GOOGLE_API_KEY: str

@@ -84,7 +84,14 @@ class SalesforceService:
             print(f"   Using OAuth 2.0 Client Credentials Grant to {token_url}")
         
         try:
-            response = requests.post(token_url, data=payload, timeout=10)
+            # Use SSL verification setting (disable for corporate proxy environments)
+            verify_ssl = settings.SALESFORCE_VERIFY_SSL
+            if not verify_ssl:
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                print("   ⚠️ SSL verification disabled")
+            
+            response = requests.post(token_url, data=payload, timeout=10, verify=verify_ssl)
             response.raise_for_status()
             
             oauth_response = response.json()
@@ -116,6 +123,8 @@ class SalesforceService:
     
     def _connect_username_password(self):
         """Connect to Salesforce using Username/Password/Security Token"""
+        import requests
+        
         # For custom domains, simple-salesforce expects just the domain name
         # For example: 'royalcanin-us--rcdev.sandbox.my' (not full URL)
         # The library constructs https://[domain].salesforce.com internally
@@ -124,11 +133,21 @@ class SalesforceService:
         print(f"   Domain: {settings.SALESFORCE_DOMAIN}")
         print(f"   Username: {settings.SALESFORCE_USERNAME}")
         
+        # Create session with SSL verification setting
+        session = requests.Session()
+        session.verify = settings.SALESFORCE_VERIFY_SSL
+        
+        if not settings.SALESFORCE_VERIFY_SSL:
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            print("   ⚠️ SSL verification disabled")
+        
         self.sf = Salesforce(
             username=settings.SALESFORCE_USERNAME,
             password=settings.SALESFORCE_PASSWORD,
             security_token=settings.SALESFORCE_SECURITY_TOKEN,
-            domain=settings.SALESFORCE_DOMAIN
+            domain=settings.SALESFORCE_DOMAIN,
+            session=session
         )
         
         print(f"✅ Connected successfully")
