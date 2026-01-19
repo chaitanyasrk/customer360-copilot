@@ -43,11 +43,11 @@ class CaseAnalysisAgent:
     def __init__(self):
         """Initialize the agent with LLM and graph"""
         self.llm = ChatGoogleGenerativeAI(
-            #model="gemini-2.5-flash",
-            model="gemini-2.5-flash-lite",
+            model=settings.GEMINI_MODEL,
             google_api_key=settings.GOOGLE_API_KEY,
             temperature=0.3
         )
+        print(f"🤖 CaseAnalysisAgent initialized with model: {settings.GEMINI_MODEL}")
         self.graph = self._build_graph()
         self.examples_df = self._load_examples()
     

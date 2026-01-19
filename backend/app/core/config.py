@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     
     # Google Gemini API
     GOOGLE_API_KEY: str
+    GEMINI_MODEL: str = "gemini-2.0-flash"  # Model to use (e.g., gemini-2.0-flash, gemini-1.5-pro)
+    
+    # Batch Processing Configuration
+    PARALLEL_BATCHES: bool = False  # If True, process batches in parallel (requires higher API quota)
+    BATCH_DELAY_SECONDS: float = 2.0  # Delay between sequential batch calls to avoid rate limits
     
     # JWT Configuration
     JWT_SECRET_KEY: str

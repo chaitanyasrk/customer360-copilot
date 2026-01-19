@@ -91,3 +91,85 @@ export interface CaseClosedResponse {
   message: string;
   closed_date?: string;
 }
+
+// =====================================================
+// Account Insights Types
+// =====================================================
+
+export type SummaryFormat = 'tables' | 'pointers' | 'charts';
+
+export interface AccountSearchRequest {
+  identifier: string;
+}
+
+export interface AccountSearchResponse {
+  found: boolean;
+  account_id?: string;
+  account_name?: string;
+  account_type?: string;
+  industry?: string;
+  website?: string;
+  phone?: string;
+  billing_city?: string;
+  billing_state?: string;
+  billing_country?: string;
+  owner_name?: string;
+  message?: string;
+}
+
+export interface DateRange {
+  start_date: string;
+  end_date: string;
+}
+
+export interface AccountInsightsRequest {
+  start_date: string;
+  end_date: string;
+  formats: SummaryFormat[];
+}
+
+export interface InsightSection {
+  title: string;
+  format: SummaryFormat;
+  content: string | string[] | Record<string, unknown>;
+}
+
+export interface ChartDataset {
+  label?: string;
+  data: number[];
+  backgroundColor?: string | string[];
+  borderColor?: string;
+  fill?: boolean;
+}
+
+export interface ChartData {
+  title: string;
+  chart_type: 'bar' | 'line' | 'pie';
+  labels: string[];
+  datasets: ChartDataset[];
+}
+
+export interface TableData {
+  headers: string[];
+  rows: (string | number)[][];
+}
+
+export interface ProcessingInfo {
+  batch_size: number;
+  batches_processed: number;
+  task_count: number;
+  event_count: number;
+  case_count: number;
+}
+
+export interface AccountInsightsResponse {
+  account_id: string;
+  account_name: string;
+  date_range: DateRange;
+  total_activities: number;
+  processing_info: ProcessingInfo;
+  sections: InsightSection[];
+  charts?: ChartData[];
+  executive_summary: string;
+  generated_at: string;
+}

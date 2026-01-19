@@ -7,6 +7,9 @@ import type {
   CaseAnalysisResponse,
   AgentInfo,
   AuthToken,
+  AccountSearchResponse,
+  AccountInsightsResponse,
+  SummaryFormat,
 } from '@/types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
@@ -101,6 +104,36 @@ class ApiService {
     const response = await this.client.post(`/cases/${caseId}/query`, {
       question,
     });
+    return response.data;
+  }
+
+  // =====================================================
+  // Account Insights Methods
+  // =====================================================
+
+  // Search for an account by ID or Name
+  async searchAccount(identifier: string): Promise<AccountSearchResponse> {
+    const response = await this.client.post<AccountSearchResponse>('/accounts/search', {
+      identifier,
+    });
+    return response.data;
+  }
+
+  // Get account activity insights
+  async getAccountInsights(
+    accountId: string,
+    startDate: string,
+    endDate: string,
+    formats: SummaryFormat[]
+  ): Promise<AccountInsightsResponse> {
+    const response = await this.client.post<AccountInsightsResponse>(
+      `/accounts/${accountId}/insights`,
+      {
+        start_date: startDate,
+        end_date: endDate,
+        formats,
+      }
+    );
     return response.data;
   }
 }

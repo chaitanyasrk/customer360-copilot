@@ -284,3 +284,113 @@ async def query_case(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing question: {str(e)}"
         )
+
+
+# =====================================================
+# Account Insights Endpoints
+# =====================================================
+
+@router.post("/accounts/search")
+async def search_account(
+    request: dict,
+    token: TokenPayload = Depends(verify_token)
+):
+    """
+    Search for an account by ID or Name
+    
+    Returns account details if found.
+    """
+    from app.services.salesforce_service import salesforce_service
+    
+    identifier = request.get("identifier", "")
+    
+    if not identifier or len(identifier.strip()) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account identifier (ID or Name) is required and must be at least 2 characters"
+        )
+    
+    result = salesforce_service.get_account_by_id_or_name(identifier.strip())
+    
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Account not found: {identifier}"
+        )
+    
+    return result
+
+
+@router.post("/accounts/{account_id}/insights")
+async def get_account_insights(
+    account_id: str,
+    request: dict,
+    token: TokenPayload = Depends(verify_agent_token)
+):
+    """
+    Generate AI-powered insights for account activity
+    
+    Fetches activities (Tasks, Events, Cases) within the specified date range
+    and generates a summarized analysis with key insights.
+    
+    Supports batch processing for large datasets to optimize token usage.
+    """
+    from app.services.salesforce_service import salesforce_service
+    from app.services.account_insights_service import account_insights_service
+    from app.models.account_insights_schemas import SummaryFormat
+    
+    # Validate request parameters
+    start_date = request.get("start_date")
+    end_date = request.get("end_date")
+    formats = request.get("formats", ["pointers", "tables"])
+    
+    if not start_date or not end_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="start_date and end_date are required (YYYY-MM-DD format)"
+        )
+    
+    # Validate account exists
+    account_data = salesforce_service.get_account_by_id_or_name(account_id)
+    if not account_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Account not found: {account_id}"
+        )
+    
+    try:
+        # Fetch activities
+        activities = salesforce_service.get_account_activities(
+            account_id=account_id,
+            start_date=start_date,
+            end_date=end_date
+        )
+        
+        # Convert format strings to enum
+        format_enums = []
+        for fmt in formats:
+            try:
+                format_enums.append(SummaryFormat(fmt.lower()))
+            except ValueError:
+                pass  # Skip invalid formats
+        
+        if not format_enums:
+            format_enums = [SummaryFormat.POINTERS, SummaryFormat.TABLES]
+        
+        # Generate insights
+        result = await account_insights_service.generate_insights(
+            account_id=account_id,
+            account_name=account_data.get("account_name", "Unknown"),
+            activities=activities,
+            start_date=start_date,
+            end_date=end_date,
+            formats=format_enums
+        )
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating insights: {str(e)}"
+        )

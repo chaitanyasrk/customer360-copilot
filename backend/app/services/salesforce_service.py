@@ -630,7 +630,236 @@ class SalesforceService:
                 "message": f"Failed to save summary: {str(e)}",
                 "case_id": case_id
             }
+    
+    def get_account_by_id_or_name(self, identifier: str) -> Optional[Dict[str, Any]]:
+        """
+        Search for an account by ID or Name
+        
+        Args:
+            identifier: Salesforce Account ID or Account Name
+        
+        Returns:
+            Dictionary with account details or None if not found
+        """
+        if not self.sf:
+            print("❌ Salesforce not connected - cannot search account")
+            return None
+        
+        try:
+            # Check if identifier looks like a Salesforce ID (15 or 18 chars, starts with 001)
+            is_id = len(identifier) in [15, 18] and identifier.startswith('001')
+            
+            if is_id:
+                # Search by ID
+                soql_query = f"""
+                    SELECT Id, Name, Type, Industry, Website, Phone,
+                           BillingCity, BillingState, BillingCountry,
+                           Owner.Name
+                    FROM Account
+                    WHERE Id = '{identifier}'
+                    LIMIT 1
+                """
+            else:
+                # Search by Name (case-insensitive partial match)
+                safe_name = identifier.replace("'", "\\'")
+                soql_query = f"""
+                    SELECT Id, Name, Type, Industry, Website, Phone,
+                           BillingCity, BillingState, BillingCountry,
+                           Owner.Name
+                    FROM Account
+                    WHERE Name LIKE '%{safe_name}%'
+                    ORDER BY Name
+                    LIMIT 1
+                """
+            
+            result = self.sf.query(soql_query)
+            
+            if result['totalSize'] == 0:
+                print(f"❌ Account not found: {identifier}")
+                return None
+            
+            record = result['records'][0]
+            owner = record.get('Owner') or {}
+            
+            account_data = {
+                'found': True,
+                'account_id': record.get('Id'),
+                'account_name': record.get('Name'),
+                'account_type': record.get('Type'),
+                'industry': record.get('Industry'),
+                'website': record.get('Website'),
+                'phone': record.get('Phone'),
+                'billing_city': record.get('BillingCity'),
+                'billing_state': record.get('BillingState'),
+                'billing_country': record.get('BillingCountry'),
+                'owner_name': owner.get('Name')
+            }
+            
+            print(f"✅ Found account: {account_data['account_name']}")
+            return account_data
+            
+        except Exception as e:
+            print(f"❌ Error searching account: {e}")
+            return None
+    
+    def get_account_activities(
+        self, 
+        account_id: str, 
+        start_date: str, 
+        end_date: str
+    ) -> Dict[str, Any]:
+        """
+        Fetch all activities (Tasks, Events, Cases) for an account within a date range
+        
+        Args:
+            account_id: Salesforce Account ID
+            start_date: Start date in YYYY-MM-DD format
+            end_date: End date in YYYY-MM-DD format
+        
+        Returns:
+            Dictionary with tasks, events, cases, and total count
+        """
+        if not self.sf:
+            print("❌ Salesforce not connected - cannot fetch activities")
+            return {
+                'tasks': [],
+                'events': [],
+                'cases': [],
+                'total_count': 0,
+                'error': 'Salesforce not connected'
+            }
+        
+        activities = {
+            'tasks': [],
+            'events': [],
+            'cases': [],
+            'total_count': 0
+        }
+        
+        try:
+            # Fetch Tasks
+            tasks_query = f"""
+                SELECT Id, Subject, Description, Status, Priority,
+                       ActivityDate, CreatedDate, Owner.Name,
+                       What.Name, Who.Name
+                FROM Task
+                WHERE AccountId = '{account_id}'
+                AND CreatedDate >= {start_date}T00:00:00Z
+                AND CreatedDate <= {end_date}T23:59:59Z
+                ORDER BY CreatedDate DESC
+            """
+            
+            tasks_result = self.sf.query(tasks_query)
+            for record in tasks_result.get('records', []):
+                owner = record.get('Owner') or {}
+                what = record.get('What') or {}
+                who = record.get('Who') or {}
+                
+                activities['tasks'].append({
+                    'id': record.get('Id'),
+                    'type': 'Task',
+                    'subject': record.get('Subject'),
+                    'description': record.get('Description'),
+                    'status': record.get('Status'),
+                    'priority': record.get('Priority'),
+                    'activity_date': record.get('ActivityDate'),
+                    'created_date': record.get('CreatedDate'),
+                    'owner_name': owner.get('Name'),
+                    'related_to': what.get('Name') or who.get('Name')
+                })
+            
+            print(f"  📋 Found {len(activities['tasks'])} tasks")
+            
+        except Exception as e:
+            print(f"⚠️ Error fetching tasks: {e}")
+        
+        try:
+            # Fetch Events
+            events_query = f"""
+                SELECT Id, Subject, Description, StartDateTime, EndDateTime,
+                       CreatedDate, Owner.Name, What.Name, Who.Name,
+                       Location, IsAllDayEvent
+                FROM Event
+                WHERE AccountId = '{account_id}'
+                AND CreatedDate >= {start_date}T00:00:00Z
+                AND CreatedDate <= {end_date}T23:59:59Z
+                ORDER BY CreatedDate DESC
+            """
+            
+            events_result = self.sf.query(events_query)
+            for record in events_result.get('records', []):
+                owner = record.get('Owner') or {}
+                what = record.get('What') or {}
+                who = record.get('Who') or {}
+                
+                activities['events'].append({
+                    'id': record.get('Id'),
+                    'type': 'Event',
+                    'subject': record.get('Subject'),
+                    'description': record.get('Description'),
+                    'status': 'Scheduled' if record.get('StartDateTime') else 'Unknown',
+                    'priority': 'Normal',
+                    'activity_date': record.get('StartDateTime'),
+                    'created_date': record.get('CreatedDate'),
+                    'owner_name': owner.get('Name'),
+                    'related_to': what.get('Name') or who.get('Name'),
+                    'location': record.get('Location'),
+                    'is_all_day': record.get('IsAllDayEvent')
+                })
+            
+            print(f"  📅 Found {len(activities['events'])} events")
+            
+        except Exception as e:
+            print(f"⚠️ Error fetching events: {e}")
+        
+        try:
+            # Fetch Cases
+            cases_query = f"""
+                SELECT Id, CaseNumber, Subject, Description, Status, Priority,
+                       CreatedDate, ClosedDate, Owner.Name, Type, Origin
+                FROM Case
+                WHERE AccountId = '{account_id}'
+                AND CreatedDate >= {start_date}T00:00:00Z
+                AND CreatedDate <= {end_date}T23:59:59Z
+                ORDER BY CreatedDate DESC
+            """
+            
+            cases_result = self.sf.query(cases_query)
+            for record in cases_result.get('records', []):
+                owner = record.get('Owner') or {}
+                
+                activities['cases'].append({
+                    'id': record.get('Id'),
+                    'type': 'Case',
+                    'subject': record.get('Subject'),
+                    'description': record.get('Description'),
+                    'status': record.get('Status'),
+                    'priority': record.get('Priority'),
+                    'activity_date': record.get('CreatedDate'),
+                    'created_date': record.get('CreatedDate'),
+                    'owner_name': owner.get('Name'),
+                    'related_to': f"Case #{record.get('CaseNumber')}",
+                    'case_number': record.get('CaseNumber'),
+                    'case_type': record.get('Type'),
+                    'origin': record.get('Origin'),
+                    'closed_date': record.get('ClosedDate')
+                })
+            
+            print(f"  📁 Found {len(activities['cases'])} cases")
+            
+        except Exception as e:
+            print(f"⚠️ Error fetching cases: {e}")
+        
+        activities['total_count'] = (
+            len(activities['tasks']) + 
+            len(activities['events']) + 
+            len(activities['cases'])
+        )
+        
+        print(f"✅ Total activities found: {activities['total_count']}")
+        return activities
 
 
 # Singleton instance
 salesforce_service = SalesforceService()
+

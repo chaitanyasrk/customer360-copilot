@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Login } from '@/pages/Login';
 import { AgentDashboard } from '@/pages/AgentDashboard';
+import { AccountInsights } from '@/pages/AccountInsights';
 import { useAuthStore } from '@/stores/authStore';
 
 const queryClient = new QueryClient({
@@ -48,6 +49,14 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/agent/account-insights"
+            element={
+              <ProtectedRoute requiredRole="agent">
+                <AccountInsights />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
@@ -56,3 +65,4 @@ function App() {
 }
 
 export default App;
+

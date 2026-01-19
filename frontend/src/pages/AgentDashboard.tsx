@@ -102,8 +102,18 @@ export const AgentDashboard: React.FC = () => {
 
       <div className="max-w-7xl mx-auto px-4 py-8">
         <header className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Customer 360 Copilot</h1>
-          <p className="text-gray-600 mt-2">AI-powered case analysis and management</p>
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Customer 360 Copilot</h1>
+              <p className="text-gray-600 mt-2">AI-powered case analysis and management</p>
+            </div>
+            <a
+              href="/agent/account-insights"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Account Insights
+            </a>
+          </div>
         </header>
 
         {/* Case Input Section */}

@@ -193,3 +193,104 @@ Provide your response in the following JSON structure:
 
 Think step-by-step to ensure optimal agent assignment.
 """
+
+
+ACCOUNT_ACTIVITY_BATCH_PROMPT = """You are an expert AI assistant analyzing customer account activities for a Customer 360 view.
+
+Analyze the following batch of account activities and provide a concise summary.
+
+**Account:** {account_name} (ID: {account_id})
+**Batch:** {batch_number} of {total_batches}
+**Date Range:** {start_date} to {end_date}
+
+**Activities in this batch ({record_count} records):**
+{activities_data}
+
+**Instructions:**
+1. Identify key patterns and trends in this batch
+2. Note any high-priority items or escalations
+3. Summarize the main activity types and their outcomes
+4. Be professional and direct - no greetings, pleasantries, or emojis
+5. Focus on actionable insights
+
+**Output Format:**
+Provide your response in the following JSON structure:
+{{
+  "batch_summary": "A 2-3 sentence summary of this batch",
+  "key_points": [
+    "Key point 1",
+    "Key point 2",
+    "Key point 3"
+  ],
+  "metrics": {{
+    "high_priority_count": 0,
+    "completed_count": 0,
+    "pending_count": 0
+  }}
+}}
+"""
+
+
+ACCOUNT_ACTIVITY_FINAL_PROMPT = """You are an expert AI assistant creating a comprehensive account activity report for customer service agents.
+
+**Account:** {account_name} (ID: {account_id})
+**Analysis Period:** {start_date} to {end_date}
+**Total Activities:** {total_count} (Tasks: {task_count}, Events: {event_count}, Cases: {case_count})
+
+**Batch Summaries:**
+{batch_summaries}
+
+**Requested Output Formats:** {formats}
+
+**Instructions:**
+1. Consolidate all batch summaries into a cohesive analysis
+2. Generate output in the requested formats only
+3. Be professional and direct - absolutely no greetings, pleasantries, icons, or emojis
+4. Focus on actionable insights and clear data presentation
+5. For tables: use structured data that can be rendered as HTML tables
+6. For bullet points: use clear, concise statements
+7. For charts: provide data suitable for bar/line chart visualization
+
+**Output Format:**
+Provide your response in the following JSON structure:
+{{
+  "executive_summary": "A 2-4 sentence executive summary of the account's activity",
+  "sections": [
+    {{
+      "title": "Section Title",
+      "format": "tables|pointers|charts",
+      "content": "Content appropriate for the format"
+    }}
+  ],
+  "chart_data": {{
+    "activity_by_type": {{
+      "labels": ["Tasks", "Events", "Cases"],
+      "values": [0, 0, 0]
+    }},
+    "activity_by_month": {{
+      "labels": ["Month1", "Month2", "Month3"],
+      "values": [0, 0, 0]
+    }},
+    "status_distribution": {{
+      "labels": ["Completed", "In Progress", "Pending"],
+      "values": [0, 0, 0]
+    }}
+  }},
+  "table_data": {{
+    "summary_table": {{
+      "headers": ["Metric", "Value"],
+      "rows": [["Total Activities", "N"], ["High Priority", "N"]]
+    }},
+    "activity_breakdown": {{
+      "headers": ["Type", "Count", "Completed", "Pending"],
+      "rows": [["Tasks", "N", "N", "N"]]
+    }}
+  }},
+  "key_insights": [
+    "Insight 1",
+    "Insight 2",
+    "Insight 3"
+  ]
+}}
+"""
+
