@@ -121,10 +121,16 @@ class SalesforceService:
             print(f"✅ OAuth token obtained successfully")
             print(f"   Instance URL: {instance_url}")
             
+            # Create a session with the correct SSL setting so that simple_salesforce
+            # uses it for ALL subsequent SOQL queries (not just the token fetch above)
+            session = requests.Session()
+            session.verify = verify_ssl
+            
             # Create Salesforce connection with the access token
             self.sf = Salesforce(
                 instance_url=instance_url,
-                session_id=access_token
+                session_id=access_token,
+                session=session
             )
             
         except requests.exceptions.HTTPError as e:
