@@ -12,6 +12,7 @@ services:
       - APP_PORT=8000
       - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
       - CHROMA_PERSIST_DIRECTORY=/app/chroma_db
+      - SALESFORCE_VERIFY_SSL=False
     volumes:
       - ./backend:/app
       - chroma_data:/app/chroma_db
