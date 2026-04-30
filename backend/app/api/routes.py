@@ -394,3 +394,113 @@ async def get_account_insights(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating insights: {str(e)}"
         )
+
+
+# =====================================================
+# Sales Rep Summary Endpoints (Multi-Agent Pipeline)
+# =====================================================
+
+@router.post("/accounts/{account_id}/sales-summary")
+async def get_sales_rep_summary(
+    account_id: str,
+    request: dict,
+    token: TokenPayload = Depends(verify_agent_token)
+):
+    """
+    Generate a Sales Rep Account Summary using the multi-agent pipeline.
+    
+    Pipeline: Metadata Agent → Query Agent → Insights Agent
+    
+    - Metadata Agent: discovers SF object schemas (cached)
+    - Query Agent: uses LLM + metadata to formulate and execute SOQL
+    - Insights Agent: generates structured summary from raw data
+    
+    Returns contact interactions, case trends, key takeaways, and executive summary.
+    """
+    from app.services.salesforce_service import salesforce_service
+    from app.services.sales_rep_agent import sales_rep_agent
+    from datetime import datetime, timedelta
+    from app.core.config import settings
+    
+    # Parse request parameters
+    start_date = request.get("start_date")
+    end_date = request.get("end_date")
+    
+    # Default to configured days (90) if no dates provided
+    if not end_date:
+        end_date = datetime.utcnow().strftime("%Y-%m-%d")
+    if not start_date:
+        default_start = datetime.utcnow() - timedelta(days=settings.SALES_REP_DEFAULT_DAYS)
+        start_date = default_start.strftime("%Y-%m-%d")
+    
+    # Validate account exists
+    account_data = salesforce_service.get_account_by_id_or_name(account_id)
+    if not account_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Account not found: {account_id}"
+        )
+    
+    try:
+        result = await sales_rep_agent.generate_summary(
+            account_id=account_id,
+            account_name=account_data.get("account_name", "Unknown"),
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return result
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating sales rep summary: {str(e)}"
+        )
+
+
+@router.post("/metadata/refresh")
+async def refresh_metadata_cache(
+    request: dict = None,
+    token: TokenPayload = Depends(verify_agent_token)
+):
+    """
+    Force-refresh the Salesforce object metadata cache.
+    
+    Optionally specify which objects to refresh.
+    If no objects specified, refreshes all configured objects.
+    """
+    from app.services.metadata_cache import metadata_cache
+    
+    objects = None
+    if request and request.get("objects"):
+        objects = request["objects"]
+        if isinstance(objects, str):
+            objects = [objects]
+        for obj in objects:
+            metadata_cache.refresh_cache(obj)
+    else:
+        metadata_cache.refresh_cache()
+    
+    return {
+        "status": "success",
+        "message": f"Metadata cache refreshed for: {objects or 'all objects'}",
+        "cache_status": metadata_cache.get_cache_status(),
+        "timestamp": datetime.utcnow()
+    }
+
+
+@router.get("/metadata/status")
+async def get_metadata_cache_status(
+    token: TokenPayload = Depends(verify_token)
+):
+    """
+    Returns current metadata cache status.
+    
+    Shows which objects are cached, field counts, TTL, and expiration times.
+    """
+    from app.services.metadata_cache import metadata_cache
+    
+    return {
+        **metadata_cache.get_cache_status(),
+        "timestamp": datetime.utcnow()
+    }
+

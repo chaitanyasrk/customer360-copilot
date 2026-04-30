@@ -294,3 +294,87 @@ Provide your response in the following JSON structure:
 }}
 """
 
+
+# =====================================================
+# Multi-Agent Pipeline Prompts
+# =====================================================
+
+QUERY_FORMULATION_PROMPT = """You are a Salesforce SOQL expert. Given object metadata schemas, generate optimized SOQL queries.
+
+**Goal:** Fetch all activity and case data for a specific account within a date range, plus related contact details.
+
+**Account ID:** {account_id}
+**Date Range:** {start_date} to {end_date}
+
+**Available Salesforce Object Schemas:**
+{metadata_schema}
+
+**Instructions:**
+1. Using ONLY the field names listed in the schemas above, generate 4 SOQL queries.
+2. DO NOT use any field name that is not explicitly listed in the schemas.
+3. For relationship fields (e.g., Owner, Who, What), use the relationship name with dot notation (e.g., Owner.Name, Who.Name) ONLY if the relationship field exists in the schema.
+4. Include the most relevant fields for understanding: who was contacted, what was discussed, and case categorization.
+5. Order results by date descending.
+6. For Tasks and Events, filter by AccountId and CreatedDate within the date range.
+7. For Cases, filter by AccountId and CreatedDate within the date range.
+8. For Contacts, filter by AccountId to get all contacts for the account.
+
+**Output Format:**
+Return ONLY a JSON object with exactly these 4 keys. No explanation, no markdown, just JSON:
+{{
+  "tasks_query": "SELECT ... FROM Task WHERE ...",
+  "events_query": "SELECT ... FROM Event WHERE ...",
+  "cases_query": "SELECT ... FROM Case WHERE ...",
+  "contacts_query": "SELECT ... FROM Contact WHERE ..."
+}}
+
+**Date filter pattern for SOQL:**
+CreatedDate >= {start_date}T00:00:00Z AND CreatedDate <= {end_date}T23:59:59Z
+
+Remember: Use ONLY field names that appear in the provided schemas. Do not invent or assume any fields.
+"""
+
+
+SALES_REP_SUMMARY_PROMPT = """You are an AI assistant generating a Sales Rep Account Summary. Your output helps sales representatives understand their account at a glance.
+
+**Account:** {account_name}
+**Analysis Period:** {start_date} to {end_date}
+**Total Activities:** {total_activities} | **Total Cases:** {total_cases}
+
+**Raw Activities Data (Tasks + Events):**
+{activities_data}
+
+**Raw Cases Data:**
+{cases_data}
+
+**Contact Details:**
+{contacts_data}
+
+**Instructions:**
+Analyze the above data and generate a comprehensive Sales Rep summary. Be professional and direct — no greetings, pleasantries, icons, or emojis.
+
+1. **CONTACT INTERACTIONS**: For each unique contact found in the activities:
+   - Identify who they are (name, title if available)
+   - Count how many interactions (tasks/events) involved them
+   - Determine the last interaction date
+   - List the key topics/subjects discussed
+   - Note the types of activities (Call, Email, Meeting, etc.)
+   - Sort by most recent interaction first
+
+2. **CASE TRENDS**: Analyze all cases and categorize them:
+   - Group by case type/category/reason (use the Type, Reason, or similar fields)
+   - If no clear category field exists, infer categories from the Subject
+   - Calculate count and percentage for each category
+   - Determine if each category trend is "rising", "stable", or "declining" based on date distribution
+   - Include 2-3 recent example case subjects per category
+   - Common categories to look for: Credit requests, Ordering issues, Account access/login issues, Product inquiries, Delivery/shipping issues, Billing disputes
+
+3. **KEY TAKEAWAYS**: Generate 3-5 actionable bullet points that a sales rep should know before their next call with this account.
+
+4. **EXECUTIVE SUMMARY**: Write a 2-4 sentence overview covering the overall account health, engagement level, and most critical issues.
+
+**Output Format:**
+Return ONLY a JSON object matching this schema. No explanation, no markdown, just JSON:
+{output_schema}
+"""
+

@@ -173,3 +173,62 @@ export interface AccountInsightsResponse {
   executive_summary: string;
   generated_at: string;
 }
+
+// =====================================================
+// Sales Rep Summary Types (Multi-Agent Pipeline)
+// =====================================================
+
+export interface ContactInteraction {
+  contact_name: string;
+  contact_title?: string | null;
+  contact_email?: string | null;
+  interaction_count: number;
+  last_interaction_date?: string | null;
+  topics: string[];
+  activity_types: string[];
+}
+
+export interface CaseTrendCategory {
+  category: string;
+  count: number;
+  percentage: number;
+  trend: 'rising' | 'stable' | 'declining';
+  recent_examples: string[];
+}
+
+export interface PipelineInfo {
+  metadata_source?: string;
+  queries_generated?: number;
+  query_errors?: string[];
+  activities_fetched?: number;
+  cases_fetched?: number;
+  contacts_resolved?: number;
+  total_elapsed_seconds?: number;
+}
+
+export interface SalesRepSummaryResponse {
+  account_id: string;
+  account_name: string;
+  date_range: DateRange;
+  contact_interactions: ContactInteraction[];
+  case_trends: CaseTrendCategory[];
+  total_activities: number;
+  total_cases: number;
+  executive_summary: string;
+  key_takeaways: string[];
+  pipeline_info: PipelineInfo;
+  generated_at: string;
+}
+
+export interface MetadataCacheStatus {
+  objects: Record<string, {
+    cached: boolean;
+    field_count: number;
+    last_refresh: string | null;
+    ttl_hours: number;
+    expires_at: string | null;
+  }>;
+  cache_dir: string;
+  ttl_hours: number;
+  timestamp?: string;
+}

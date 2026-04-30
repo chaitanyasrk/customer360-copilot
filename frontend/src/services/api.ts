@@ -10,6 +10,8 @@ import type {
   AccountSearchResponse,
   AccountInsightsResponse,
   SummaryFormat,
+  SalesRepSummaryResponse,
+  MetadataCacheStatus,
 } from '@/types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
@@ -134,6 +136,40 @@ class ApiService {
         formats,
       }
     );
+    return response.data;
+  }
+
+  // =====================================================
+  // Sales Rep Summary Methods (Multi-Agent Pipeline)
+  // =====================================================
+
+  // Generate sales rep account summary
+  async getSalesRepSummary(
+    accountId: string,
+    startDate?: string,
+    endDate?: string
+  ): Promise<SalesRepSummaryResponse> {
+    const response = await this.client.post<SalesRepSummaryResponse>(
+      `/accounts/${accountId}/sales-summary`,
+      {
+        start_date: startDate,
+        end_date: endDate,
+      }
+    );
+    return response.data;
+  }
+
+  // Get metadata cache status
+  async getMetadataStatus(): Promise<MetadataCacheStatus> {
+    const response = await this.client.get<MetadataCacheStatus>('/metadata/status');
+    return response.data;
+  }
+
+  // Refresh metadata cache
+  async refreshMetadataCache(objects?: string[]): Promise<any> {
+    const response = await this.client.post('/metadata/refresh', {
+      objects,
+    });
     return response.data;
   }
 }

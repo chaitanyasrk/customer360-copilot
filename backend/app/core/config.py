@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     SUMMARY_FIELD_NAME: str = "Summary__c"  # Field for storing the summary
     CASE_ID_FIELD_NAME: str = "Case__c"  # Lookup field to Case
     
+    # Metadata Cache Configuration
+    METADATA_CACHE_TTL_HOURS: int = 24
+    METADATA_CACHE_DIR: str = "./app/data/metadata_cache"
+    METADATA_OBJECTS: str = "Task,Event,Case,Contact,Account"
+    
+    # Sales Rep Summary Configuration
+    SALES_REP_DEFAULT_DAYS: int = 90
+    
     @property
     def cors_origins_list(self) -> List[str]:
         """Parse CORS origins into a list"""

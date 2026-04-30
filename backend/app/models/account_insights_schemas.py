@@ -123,3 +123,49 @@ class BatchSummaryResult(BaseModel):
     record_count: int
     summary: str
     key_points: List[str] = []
+
+
+# =====================================================
+# Sales Rep Summary Models
+# =====================================================
+
+class ContactInteraction(BaseModel):
+    """A contact that was interacted with, along with interaction details"""
+    contact_name: str
+    contact_title: Optional[str] = None
+    contact_email: Optional[str] = None
+    interaction_count: int = 0
+    last_interaction_date: Optional[str] = None
+    topics: List[str] = Field(default_factory=list, description="Subjects/topics discussed")
+    activity_types: List[str] = Field(default_factory=list, description="Call, Email, Meeting, etc.")
+
+
+class CaseTrendCategory(BaseModel):
+    """A category of cases with trend information"""
+    category: str = Field(..., description="e.g., Credit Request, Ordering Issue")
+    count: int = 0
+    percentage: float = 0.0
+    trend: str = Field(default="stable", description="rising | stable | declining")
+    recent_examples: List[str] = Field(default_factory=list, description="Recent case subjects")
+
+
+class SalesRepSummaryResponse(BaseModel):
+    """Response model for the Sales Rep Account Summary (multi-agent pipeline)"""
+    account_id: str
+    account_name: str
+    date_range: Dict[str, str]
+    contact_interactions: List[ContactInteraction] = []
+    case_trends: List[CaseTrendCategory] = []
+    total_activities: int = 0
+    total_cases: int = 0
+    executive_summary: str = Field(
+        ...,
+        description="2-4 sentence executive summary for the sales rep"
+    )
+    key_takeaways: List[str] = Field(default_factory=list)
+    pipeline_info: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Metadata source, query count, timing, etc."
+    )
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+

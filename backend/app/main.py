@@ -44,6 +44,16 @@ async def root():
     }
 
 
+@app.on_event("startup")
+async def warm_caches():
+    """Pre-populate metadata cache on server start"""
+    try:
+        from app.services.metadata_cache import metadata_cache
+        metadata_cache.warm_cache()
+    except Exception as e:
+        print(f"⚠️ Metadata cache warming failed (non-fatal): {e}")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

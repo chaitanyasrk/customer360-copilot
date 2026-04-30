@@ -65,3 +65,6 @@ htmlcov/
 # Temporary files
 *.tmp
 *.bak
+
+# Metadata cache (org-specific, auto-generated)
+backend/app/data/metadata_cache/
