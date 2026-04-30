@@ -190,30 +190,48 @@ class SalesRepSummaryAgent:
                 account_id, start_date, end_date, state.get("object_metadata", {})
             )
 
-        # Step 2: Validate queries (safety check)
+        # Step 2: Validate and sanitize queries (safety + date-type fix)
         for name, soql in list(generated_queries.items()):
             if not self._validate_soql(soql):
-                print(f"  ⚠️ Invalid query '{name}' removed: {soql[:80]}...")
+                print(f"  Removing invalid query '{name}'")
                 query_errors.append(f"Invalid query '{name}': {soql[:100]}")
                 del generated_queries[name]
+            else:
+                # Sanitize: fix date/datetime type mismatches from LLM
+                sanitized = self._sanitize_soql_query(soql, name)
+                if sanitized != soql:
+                    print(f"  Sanitized '{name}' query (date-type fix applied)")
+                    generated_queries[name] = sanitized
 
         # Step 3: Execute queries
         from app.services.salesforce_service import salesforce_service
 
         if not salesforce_service.sf:
-            print("  ❌ Salesforce not connected — cannot execute queries")
+            print("  Salesforce not connected — cannot execute queries")
             query_errors.append("Salesforce not connected")
         else:
+            fallback_queries = self._get_fallback_queries(
+                account_id, start_date, end_date, state.get("object_metadata", {})
+            )
+
             # Execute Tasks query
             if "tasks_query" in generated_queries:
                 try:
                     result = salesforce_service.sf.query(generated_queries["tasks_query"])
                     for record in result.get("records", []):
                         raw_activities.append(self._flatten_record(record, "Task"))
-                    print(f"  📋 Tasks: {len(result.get('records', []))} records")
+                    print(f"  Tasks: {len(result.get('records', []))} records")
                 except Exception as e:
-                    print(f"  ⚠️ Tasks query error: {e}")
-                    query_errors.append(f"Tasks query: {str(e)}")
+                    print(f"  Tasks query failed, retrying with fallback: {e}")
+                    query_errors.append(f"Tasks query (LLM): {str(e)[:120]}")
+                    try:
+                        result = salesforce_service.sf.query(fallback_queries["tasks_query"])
+                        for record in result.get("records", []):
+                            raw_activities.append(self._flatten_record(record, "Task"))
+                        print(f"  Tasks (fallback): {len(result.get('records', []))} records")
+                    except Exception as e2:
+                        print(f"  Tasks fallback also failed: {e2}")
+                        query_errors.append(f"Tasks fallback: {str(e2)[:120]}")
 
             # Execute Events query
             if "events_query" in generated_queries:
@@ -221,10 +239,18 @@ class SalesRepSummaryAgent:
                     result = salesforce_service.sf.query(generated_queries["events_query"])
                     for record in result.get("records", []):
                         raw_activities.append(self._flatten_record(record, "Event"))
-                    print(f"  📅 Events: {len(result.get('records', []))} records")
+                    print(f"  Events: {len(result.get('records', []))} records")
                 except Exception as e:
-                    print(f"  ⚠️ Events query error: {e}")
-                    query_errors.append(f"Events query: {str(e)}")
+                    print(f"  Events query failed, retrying with fallback: {e}")
+                    query_errors.append(f"Events query (LLM): {str(e)[:120]}")
+                    try:
+                        result = salesforce_service.sf.query(fallback_queries["events_query"])
+                        for record in result.get("records", []):
+                            raw_activities.append(self._flatten_record(record, "Event"))
+                        print(f"  Events (fallback): {len(result.get('records', []))} records")
+                    except Exception as e2:
+                        print(f"  Events fallback also failed: {e2}")
+                        query_errors.append(f"Events fallback: {str(e2)[:120]}")
 
             # Execute Cases query
             if "cases_query" in generated_queries:
@@ -232,10 +258,18 @@ class SalesRepSummaryAgent:
                     result = salesforce_service.sf.query(generated_queries["cases_query"])
                     for record in result.get("records", []):
                         raw_cases.append(self._flatten_record(record, "Case"))
-                    print(f"  📁 Cases: {len(result.get('records', []))} records")
+                    print(f"  Cases: {len(result.get('records', []))} records")
                 except Exception as e:
-                    print(f"  ⚠️ Cases query error: {e}")
-                    query_errors.append(f"Cases query: {str(e)}")
+                    print(f"  Cases query failed, retrying with fallback: {e}")
+                    query_errors.append(f"Cases query (LLM): {str(e)[:120]}")
+                    try:
+                        result = salesforce_service.sf.query(fallback_queries["cases_query"])
+                        for record in result.get("records", []):
+                            raw_cases.append(self._flatten_record(record, "Case"))
+                        print(f"  Cases (fallback): {len(result.get('records', []))} records")
+                    except Exception as e2:
+                        print(f"  Cases fallback also failed: {e2}")
+                        query_errors.append(f"Cases fallback: {str(e2)[:120]}")
 
             # Execute Contacts query (if provided)
             if "contacts_query" in generated_queries:
@@ -246,10 +280,21 @@ class SalesRepSummaryAgent:
                         contact_id = flat.get("Id", "")
                         if contact_id:
                             raw_contacts[contact_id] = flat
-                    print(f"  👤 Contacts: {len(raw_contacts)} records")
+                    print(f"  Contacts: {len(raw_contacts)} records")
                 except Exception as e:
-                    print(f"  ⚠️ Contacts query error: {e}")
-                    query_errors.append(f"Contacts query: {str(e)}")
+                    print(f"  Contacts query failed, retrying with fallback: {e}")
+                    query_errors.append(f"Contacts query (LLM): {str(e)[:120]}")
+                    try:
+                        result = salesforce_service.sf.query(fallback_queries["contacts_query"])
+                        for record in result.get("records", []):
+                            flat = self._flatten_record(record, "Contact")
+                            contact_id = flat.get("Id", "")
+                            if contact_id:
+                                raw_contacts[contact_id] = flat
+                        print(f"  Contacts (fallback): {len(raw_contacts)} records")
+                    except Exception as e2:
+                        print(f"  Contacts fallback also failed: {e2}")
+                        query_errors.append(f"Contacts fallback: {str(e2)[:120]}")
 
             # Also extract contact IDs from activities and fetch missing ones
             contact_ids_in_activities = set()
@@ -494,15 +539,54 @@ class SalesRepSummaryAgent:
     def _validate_soql(self, soql: str) -> bool:
         """Basic SOQL validation — ensure it's a SELECT query, no DML."""
         soql_upper = soql.strip().upper()
-        # Must start with SELECT
         if not soql_upper.startswith("SELECT"):
             return False
-        # Must not contain DML keywords
         dml_keywords = ["INSERT", "UPDATE", "DELETE", "UPSERT", "MERGE", "UNDELETE"]
         for keyword in dml_keywords:
             if f" {keyword} " in soql_upper or soql_upper.startswith(keyword):
                 return False
         return True
+
+    def _sanitize_soql_query(self, soql: str, query_name: str = "") -> str:
+        """
+        Fix common LLM mistakes with Salesforce date/datetime type handling:
+
+        - `date` fields (ActivityDate, CloseDate, etc.) must use YYYY-MM-DD format.
+          If the LLM adds T00:00:00Z suffix, strip it.
+        - `datetime` fields (CreatedDate, StartDateTime, etc.) must use ISO-8601 with Z.
+          The LLM usually gets these right.
+        - Contact queries: remove ORDER BY clause (LastName/FirstName not sortable in all orgs).
+        """
+        import re
+
+        # Known Salesforce `date` type fields (not datetime)
+        date_type_fields = [
+            "ActivityDate", "CloseDate", "Birthdate", "EndDate", "StartDate",
+            "EffectiveDate", "LastReferencedDate", "TargetDate",
+        ]
+
+        sanitized = soql
+
+        # Fix: strip T00:00:00Z / T23:59:59Z from date-type fields
+        for field in date_type_fields:
+            # Pattern: field >= YYYY-MM-DDThh:mm:ssZ  ->  field >= YYYY-MM-DD
+            sanitized = re.sub(
+                rf"({re.escape(field)}\s*[><=!]+\s*)(\d{{4}}-\d{{2}}-\d{{2}})T[\d:]+Z",
+                r"\1\2",
+                sanitized,
+                flags=re.IGNORECASE,
+            )
+
+        # Fix: for Contact queries, strip ORDER BY (LastName, FirstName are not sortable)
+        if "FROM Contact" in sanitized and "ORDER BY" in sanitized.upper():
+            sanitized = re.sub(
+                r"\s+ORDER\s+BY\s+.+$",
+                "",
+                sanitized,
+                flags=re.IGNORECASE | re.DOTALL,
+            ).rstrip()
+
+        return sanitized
 
     def _flatten_record(self, record: Dict[str, Any], record_type: str) -> Dict[str, Any]:
         """
@@ -620,13 +704,14 @@ class SalesRepSummaryAgent:
             f"ORDER BY CreatedDate DESC"
         )
 
-        # Contacts query — will be supplemented after activities
+        # Contacts query — no ORDER BY (LastName/FirstName not sortable in all orgs)
         contact_fields = _pick_fields("Contact", [
             "Name", "Title", "Email", "Phone", "Department",
         ])
         contacts_query = (
             f"SELECT {', '.join(contact_fields)} FROM Contact "
             f"WHERE AccountId = '{account_id}'"
+            # Intentionally no ORDER BY — LastName is not sortable via API in some orgs
         )
 
         return {

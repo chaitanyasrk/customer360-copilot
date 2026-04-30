@@ -309,29 +309,41 @@ QUERY_FORMULATION_PROMPT = """You are a Salesforce SOQL expert. Given object met
 **Available Salesforce Object Schemas:**
 {metadata_schema}
 
+**CRITICAL SOQL Date/DateTime Rules — Read Carefully:**
+Salesforce has two distinct date types. Using the wrong format causes a query error:
+
+| Field Type | Format to use in WHERE clause | Example |
+|---|---|---|
+| `datetime` fields (e.g., CreatedDate, LastModifiedDate, StartDateTime, EndDateTime) | ISO-8601 with time and Z suffix | `CreatedDate >= {start_date}T00:00:00Z` |
+| `date` fields (e.g., ActivityDate, CloseDate) | YYYY-MM-DD with NO time or Z suffix | `ActivityDate >= {start_date}` |
+
+- Always check the field type in the schema before writing a filter.
+- NEVER use `T00:00:00Z` on a `date` type field — it will fail.
+- NEVER use bare `YYYY-MM-DD` on a `datetime` type field — it will fail.
+
 **Instructions:**
 1. Using ONLY the field names listed in the schemas above, generate 4 SOQL queries.
 2. DO NOT use any field name that is not explicitly listed in the schemas.
 3. For relationship fields (e.g., Owner, Who, What), use the relationship name with dot notation (e.g., Owner.Name, Who.Name) ONLY if the relationship field exists in the schema.
 4. Include the most relevant fields for understanding: who was contacted, what was discussed, and case categorization.
-5. Order results by date descending.
-6. For Tasks and Events, filter by AccountId and CreatedDate within the date range.
-7. For Cases, filter by AccountId and CreatedDate within the date range.
-8. For Contacts, filter by AccountId to get all contacts for the account.
+5. For Tasks and Events, filter by AccountId. Use CreatedDate (datetime) for the date range filter.
+6. For Cases, filter by AccountId. Use CreatedDate (datetime) for the date range filter.
+7. For Contacts, filter by AccountId only — do NOT add ORDER BY on Contact (Name field is not sortable).
+8. Order Tasks, Events, and Cases by CreatedDate DESC.
 
 **Output Format:**
 Return ONLY a JSON object with exactly these 4 keys. No explanation, no markdown, just JSON:
 {{
-  "tasks_query": "SELECT ... FROM Task WHERE ...",
-  "events_query": "SELECT ... FROM Event WHERE ...",
-  "cases_query": "SELECT ... FROM Case WHERE ...",
-  "contacts_query": "SELECT ... FROM Contact WHERE ..."
+  "tasks_query": "SELECT ... FROM Task WHERE AccountId = '{account_id}' AND CreatedDate >= {start_date}T00:00:00Z AND CreatedDate <= {end_date}T23:59:59Z ORDER BY CreatedDate DESC",
+  "events_query": "SELECT ... FROM Event WHERE AccountId = '{account_id}' AND CreatedDate >= {start_date}T00:00:00Z AND CreatedDate <= {end_date}T23:59:59Z ORDER BY CreatedDate DESC",
+  "cases_query": "SELECT ... FROM Case WHERE AccountId = '{account_id}' AND CreatedDate >= {start_date}T00:00:00Z AND CreatedDate <= {end_date}T23:59:59Z ORDER BY CreatedDate DESC",
+  "contacts_query": "SELECT ... FROM Contact WHERE AccountId = '{account_id}'"
 }}
 
-**Date filter pattern for SOQL:**
-CreatedDate >= {start_date}T00:00:00Z AND CreatedDate <= {end_date}T23:59:59Z
-
-Remember: Use ONLY field names that appear in the provided schemas. Do not invent or assume any fields.
+Remember:
+- Use ONLY field names that appear in the provided schemas.
+- Use T00:00:00Z suffix ONLY for datetime-type fields, never for date-type fields.
+- Do NOT add ORDER BY to the Contact query.
 """
 
 

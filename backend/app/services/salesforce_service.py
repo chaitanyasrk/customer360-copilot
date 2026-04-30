@@ -108,37 +108,83 @@ class SalesforceService:
                 import urllib3
                 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
                 print("   ⚠️ SSL verification disabled")
-            
-            response = requests.post(token_url, data=payload, timeout=10, verify=verify_ssl)
-            response.raise_for_status()
-            
-            oauth_response = response.json()
-            
+
+            def _do_token_request(pwd: str) -> dict:
+                """POST to token endpoint and return JSON response."""
+                resp = requests.post(
+                    token_url,
+                    data={**payload, 'password': pwd},
+                    timeout=15,
+                    verify=verify_ssl,
+                )
+                resp.raise_for_status()
+                return resp.json()
+
+            # Attempt 1: password + security token (standard approach)
+            oauth_response = None
+            try:
+                oauth_response = _do_token_request(payload['password'])
+                print("   ✅ Authenticated with password + security token")
+            except requests.exceptions.HTTPError as e1:
+                err1 = {}
+                try:
+                    err1 = e1.response.json()
+                except Exception:
+                    pass
+
+                if err1.get('error') == 'invalid_grant':
+                    # Attempt 2: password only (works when Connected App has IP Relaxation)
+                    print(f"   ⚠️ password+token attempt failed ({err1.get('error_description', 'invalid_grant')})")
+                    print("   🔄 Retrying with password only (IP Relaxation mode)...")
+                    try:
+                        password_only_payload = {**payload, 'password': settings.SALESFORCE_PASSWORD}
+                        resp2 = requests.post(token_url, data=password_only_payload, timeout=15, verify=verify_ssl)
+                        resp2.raise_for_status()
+                        oauth_response = resp2.json()
+                        print("   ✅ Authenticated with password only (no security token)")
+                    except requests.exceptions.HTTPError as e2:
+                        err2 = {}
+                        try:
+                            err2 = e2.response.json()
+                        except Exception:
+                            pass
+                        print(f"   ❌ Both attempts failed.")
+                        print(f"      Attempt 1 (password+token): {err1}")
+                        print(f"      Attempt 2 (password only):  {err2}")
+                        print("   💡 Hints:")
+                        print("      1. Reset security token: SF → Settings → My Personal Info → Reset My Security Token")
+                        print("      2. Check API Enabled permission on user's Profile")
+                        print("      3. Check if MFA is enforced on the user's Profile")
+                        raise Exception(f"OAuth failed with both strategies: {err2 or err1}")
+                else:
+                    print(f"   ❌ OAuth error (not an invalid_grant): {err1}")
+                    raise Exception(f"OAuth authentication failed: {err1 or str(e1)}")
+
             # Extract access token and instance URL
             access_token = oauth_response['access_token']
             instance_url = oauth_response['instance_url']
-            
+
             print(f"✅ OAuth token obtained successfully")
             print(f"   Instance URL: {instance_url}")
-            
+
             # Create a session with the correct SSL setting so that simple_salesforce
             # uses it for ALL subsequent SOQL queries (not just the token fetch above)
             session = requests.Session()
             session.verify = verify_ssl
-            
+
             # Create Salesforce connection with the access token
             self.sf = Salesforce(
                 instance_url=instance_url,
                 session_id=access_token,
                 session=session
             )
-            
+
         except requests.exceptions.HTTPError as e:
             error_details = ""
             try:
                 error_details = e.response.json()
                 print(f"❌ OAuth authentication failed: {error_details}")
-            except:
+            except Exception:
                 print(f"❌ OAuth authentication failed: {e}")
             raise Exception(f"OAuth authentication failed: {error_details or str(e)}")
         except Exception as e:
